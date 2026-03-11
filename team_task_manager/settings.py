@@ -83,6 +83,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "drf_spectacular",
     "accounts",
     "workspaces",
     "projects",
@@ -181,8 +182,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": (
         "rest_framework.permissions.IsAuthenticated",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
     "DEFAULT_PAGINATION_CLASS": "rest_framework.pagination.PageNumberPagination",
     "PAGE_SIZE": 20,
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "Team Task Manager API",
+    "DESCRIPTION": "API documentation for the Team Task Manager backend service.",
+    "VERSION": "1.0.0",
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
