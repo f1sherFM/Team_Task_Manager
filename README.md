@@ -129,6 +129,39 @@ DB_SSL_REQUIRE=False
 For Render, configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DEBUG=False`, and `ALLOWED_HOSTS`.
 For external Render Postgres connections, set `DB_SSL_REQUIRE=True` if your URL does not already include SSL parameters.
 
+## Render Deployment
+
+The repository includes [render.yaml](C:/Users/kiril/OneDrive/Рабочий%20стол/TTM/render.yaml) and [build.sh](C:/Users/kiril/OneDrive/Рабочий%20стол/TTM/build.sh) for Render deployment.
+
+Deployment behavior on Render:
+
+- dependencies are installed in `build.sh`
+- static files are collected during build
+- database migrations run in `preDeployCommand`
+- the app starts with Gunicorn and a Uvicorn worker
+- `DEBUG` defaults to `False` when the `RENDER` environment variable is present
+- `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` automatically include `RENDER_EXTERNAL_HOSTNAME`
+- secure proxy, HTTPS redirect, secure cookies, and HSTS are enabled on Render
+
+Blueprint flow:
+
+1. Push the repository with `render.yaml`.
+2. In Render, create a new Blueprint from the repository.
+3. Render will provision:
+   - web service `team-task-manager`
+   - PostgreSQL database `team-task-manager-db`
+4. After the first deploy, create an admin user from the Render Shell:
+
+```bash
+python manage.py createsuperuser
+```
+
+Manual Render service values:
+
+- Build Command: `./build.sh`
+- Pre-Deploy Command: `python manage.py migrate --no-input`
+- Start Command: `python -m gunicorn team_task_manager.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
+
 ## HTML Pages
 
 - `/`

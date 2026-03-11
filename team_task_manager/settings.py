@@ -12,6 +12,7 @@ except ModuleNotFoundError:
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+IS_RENDER = "RENDER" in os.environ
 
 
 def load_local_env(env_path: Path) -> None:
@@ -48,10 +49,31 @@ ssl_required_default = bool(
 
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
-    "django-insecure-a!!w%ka5hor$9@ir^5e)25rbni&b&qjj(5(8tzsngwztl1(7)j",
+    os.getenv(
+        "SECRET_KEY",
+        "django-insecure-a!!w%ka5hor$9@ir^5e)25rbni&b&qjj(5(8tzsngwztl1(7)j",
+    ),
 )
-DEBUG = env_bool("DEBUG", True)
-ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+DEBUG = env_bool("DEBUG", not IS_RENDER)
+
+allowed_hosts = [
+    host.strip()
+    for host in os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
+    if host.strip()
+]
+render_external_hostname = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+if render_external_hostname:
+    allowed_hosts.append(render_external_hostname)
+ALLOWED_HOSTS = list(dict.fromkeys(allowed_hosts))
+
+csrf_trusted_origins = [
+    origin.strip()
+    for origin in os.getenv("CSRF_TRUSTED_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if render_external_hostname:
+    csrf_trusted_origins.append(f"https://{render_external_hostname}")
+CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(csrf_trusted_origins))
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -141,6 +163,15 @@ MEDIA_ROOT = BASE_DIR / "media"
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "login"
+
+if IS_RENDER:
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", True)
+    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", True)
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
