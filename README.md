@@ -70,6 +70,16 @@ Important files:
 - Permission rules live in `core/permissions.py`.
 - HTML views and DRF serializers call those layers instead of implementing business rules directly.
 
+## Architecture Decisions
+
+- The project uses the default Django `User` model to keep authentication standard and avoid unnecessary custom auth complexity.
+- Business workflows live in app-level services so HTML views and DRF endpoints reuse the same write logic.
+- Read access is implemented through selectors scoped by membership to keep multi-tenant filtering explicit and testable.
+- Authorization rules are centralized in `core.permissions` so access decisions are not reimplemented across views and serializers.
+- Slugs are immutable after creation and enforced by scoped unique constraints at the database layer.
+- `ActivityLog` is append-only and written only from services to keep audit history consistent without introducing an event bus.
+- Comments use soft delete semantics in the UI and API while preserving domain-level permission checks around deletion.
+
 ## Quick Start
 
 1. Create and activate a virtual environment.

@@ -3,7 +3,7 @@ from django.db import transaction
 from activity.services import log_activity
 from core.exceptions import DomainError
 from core.permissions import can_assign_task, can_change_task_status, can_create_task
-from core.slugs import generate_unique_slug
+from core.slugs import create_with_unique_slug
 from tasks.models import Task
 from projects.models import Project
 
@@ -28,20 +28,19 @@ def create_task(
     if assignee and not project.workspace.memberships.filter(user=assignee).exists():
         raise DomainError("Assignee must be a workspace member.")
 
-    slug = generate_unique_slug(
+    task = create_with_unique_slug(
         model=Task,
         value=title,
         scope={"project": project},
-    )
-    task = Task.objects.create(
-        project=project,
-        title=title,
-        slug=slug,
-        description=description,
-        priority=priority,
-        created_by=created_by,
-        assignee=assignee,
-        due_date=due_date,
+        create_kwargs={
+            "project": project,
+            "title": title,
+            "description": description,
+            "priority": priority,
+            "created_by": created_by,
+            "assignee": assignee,
+            "due_date": due_date,
+        },
     )
     log_activity(
         workspace=project.workspace,

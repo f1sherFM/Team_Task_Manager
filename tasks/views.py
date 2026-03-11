@@ -13,6 +13,8 @@ from core.permissions import (
     can_change_task_status,
     can_create_task,
     can_delete_comment,
+    get_workspace_membership,
+    has_membership_role,
 )
 from tasks.forms import TaskCreateForm, TaskUpdateForm
 from tasks.models import Task
@@ -106,13 +108,18 @@ class TaskDetailView(TaskAccessMixin, TemplateView):
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         comments = list(get_task_comments(task=self.task))
+        membership = get_workspace_membership(
+            workspace=self.task.project.workspace,
+            user=self.request.user,
+        )
+        is_workspace_admin = has_membership_role(membership, "owner", "admin")
         context["task"] = self.task
         context["comments"] = comments
         context["comment_form"] = CommentForm()
         context["deletable_comment_ids"] = {
             comment.id
             for comment in comments
-            if can_delete_comment(comment=comment, user=self.request.user)
+            if is_workspace_admin or comment.author_id == self.request.user.id
         }
         return context
 

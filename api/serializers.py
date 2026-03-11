@@ -12,7 +12,7 @@ from tasks.models import Task
 from tasks.selectors import get_project_task_by_slug
 from tasks.services import assign_task, change_task_status, create_task
 from workspaces.models import Workspace
-from workspaces.selectors import get_workspace_by_slug
+from workspaces.selectors import get_user_workspace_by_slug
 from workspaces.services import create_workspace
 
 
@@ -56,7 +56,10 @@ class ProjectSerializer(serializers.ModelSerializer):
         workspace_slug = validated_data.pop("workspace_slug")
         request = self.context["request"]
         try:
-            workspace = get_workspace_by_slug(workspace_slug)
+            workspace = get_user_workspace_by_slug(
+                slug=workspace_slug,
+                user=request.user,
+            )
             return create_project(workspace=workspace, created_by=request.user, **validated_data)
         except (Workspace.DoesNotExist, DomainError) as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc

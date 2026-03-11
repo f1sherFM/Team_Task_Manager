@@ -3,14 +3,17 @@ from django.utils import timezone
 
 from core.exceptions import DomainError
 from core.permissions import has_membership_role
-from core.slugs import generate_unique_slug
+from core.slugs import create_with_unique_slug
 from workspaces.models import Invitation, Membership, MembershipRole, Workspace
 
 
 @transaction.atomic
 def create_workspace(*, owner, name: str) -> Workspace:
-    slug = generate_unique_slug(model=Workspace, value=name)
-    workspace = Workspace.objects.create(name=name, slug=slug, owner=owner)
+    workspace = create_with_unique_slug(
+        model=Workspace,
+        value=name,
+        create_kwargs={"name": name, "owner": owner},
+    )
     Membership.objects.create(workspace=workspace, user=owner, role=MembershipRole.OWNER)
     return workspace
 
