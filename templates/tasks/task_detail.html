@@ -13,4 +13,33 @@
     <p>{{ task.description|default:"No description." }}</p>
     <p><a href="{% url 'task-edit' slug=task.slug %}">Edit task</a></p>
 </section>
+
+<section>
+    <h2>Comments</h2>
+    <ul>
+        {% for comment in comments %}
+            <li>
+                <strong>{{ comment.author.username }}</strong>:
+                {{ comment.display_text }}
+                {% if not comment.is_deleted and comment.id in deletable_comment_ids %}
+                    <form action="{% url 'comment-delete' comment_id=comment.id %}" method="post">
+                        {% csrf_token %}
+                        <button type="submit">Delete</button>
+                    </form>
+                {% endif %}
+            </li>
+        {% empty %}
+            <li>No comments yet.</li>
+        {% endfor %}
+    </ul>
+</section>
+
+<section>
+    <h2>Add comment</h2>
+    <form action="{% url 'comment-create' slug=task.slug %}" method="post">
+        {% csrf_token %}
+        {{ comment_form.as_p }}
+        <button type="submit">Add comment</button>
+    </form>
+</section>
 {% endblock %}

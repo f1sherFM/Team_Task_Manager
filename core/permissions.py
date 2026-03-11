@@ -54,3 +54,14 @@ def can_change_task_status(*, task, user) -> bool:
         return True
 
     return getattr(task.assignee, "id", None) == getattr(user, "id", None)
+
+
+def can_create_comment(*, task, user) -> bool:
+    return can_view_task(task=task, user=user)
+
+
+def can_delete_comment(*, comment, user) -> bool:
+    if can_manage_workspace(workspace=comment.task.project.workspace, user=user):
+        return True
+
+    return getattr(comment.author, "id", None) == getattr(user, "id", None)

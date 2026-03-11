@@ -5,8 +5,15 @@ from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic import FormView, TemplateView
 
+from comments.forms import CommentForm
+from comments.selectors import get_task_comments
 from core.exceptions import DomainError
-from core.permissions import can_assign_task, can_change_task_status, can_create_task
+from core.permissions import (
+    can_assign_task,
+    can_change_task_status,
+    can_create_task,
+    can_delete_comment,
+)
 from tasks.forms import TaskCreateForm, TaskUpdateForm
 from tasks.models import Task
 from tasks.selectors import (
@@ -84,7 +91,15 @@ class TaskDetailView(TaskAccessMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        comments = list(get_task_comments(task=self.task))
         context["task"] = self.task
+        context["comments"] = comments
+        context["comment_form"] = CommentForm()
+        context["deletable_comment_ids"] = {
+            comment.id
+            for comment in comments
+            if can_delete_comment(comment=comment, user=self.request.user)
+        }
         return context
 
 
