@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}{{ workspace.name }} | Team Task Manager{% endblock %}
+
+{% block content %}
+<section>
+    <h1>{{ workspace.name }}</h1>
+    <p>Slug: {{ workspace.slug }}</p>
+    <p>Owner: {{ workspace.owner.username }}</p>
+    <p><a href="{% url 'workspace-members' slug=workspace.slug %}">View members</a></p>
+</section>
+{% endblock %}

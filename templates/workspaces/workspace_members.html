@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block title %}Members | {{ workspace.name }}{% endblock %}
+
+{% block content %}
+<section>
+    <h1>Members of {{ workspace.name }}</h1>
+    <ul>
+        {% for membership in memberships %}
+            <li>{{ membership.user.username }} - {{ membership.role }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endblock %}

@@ -17,3 +17,7 @@ def get_workspace_members(workspace: Workspace) -> QuerySet[Membership]:
 
 def get_workspace_by_slug(slug: str) -> Workspace:
     return Workspace.objects.select_related("owner").get(slug=slug)
+
+
+def get_user_workspace_by_slug(*, slug: str, user) -> Workspace:
+    return get_user_workspaces(user).get(slug=slug)

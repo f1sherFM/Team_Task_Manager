@@ -6,5 +6,8 @@
 <section>
     <h1>Team Task Manager</h1>
     <p>Backend-first project and task management platform.</p>
+    {% if request.user.is_authenticated %}
+        <p><a href="{% url 'workspace-list' %}">Open your workspaces</a></p>
+    {% endif %}
 </section>
 {% endblock %}

@@ -6,5 +6,6 @@ from core.views import HomeView
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     path("accounts/", include("accounts.urls")),
+    path("workspaces/", include("workspaces.urls")),
     path("admin/", admin.site.urls),
 ]
