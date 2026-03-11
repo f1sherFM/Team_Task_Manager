@@ -19,5 +19,8 @@ def get_workspace_projects(*, workspace: Workspace) -> QuerySet[Project]:
     )
 
 
-def get_project_by_slug(*, slug: str, user) -> Project:
-    return get_user_projects(user).get(slug=slug)
+def get_workspace_project_by_slug(*, workspace_slug: str, project_slug: str, user) -> Project:
+    return get_user_projects(user).get(
+        workspace__slug=workspace_slug,
+        slug=project_slug,
+    )

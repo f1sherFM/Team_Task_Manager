@@ -6,10 +6,10 @@ from comments.services import add_comment
 from core.exceptions import DomainError
 from django.contrib.auth import get_user_model
 from projects.models import Project
-from projects.selectors import get_project_by_slug
+from projects.selectors import get_workspace_project_by_slug
 from projects.services import create_project
 from tasks.models import Task
-from tasks.selectors import get_task_by_slug
+from tasks.selectors import get_project_task_by_slug
 from tasks.services import assign_task, change_task_status, create_task
 from workspaces.models import Workspace
 from workspaces.selectors import get_workspace_by_slug
@@ -63,6 +63,7 @@ class ProjectSerializer(serializers.ModelSerializer):
 
 
 class TaskSerializer(serializers.ModelSerializer):
+    workspace_slug = serializers.SlugField(write_only=True, required=False)
     project_slug = serializers.SlugField(write_only=True, required=False)
     project = serializers.CharField(source="project.slug", read_only=True)
     created_by = serializers.CharField(source="created_by.username", read_only=True)
@@ -78,6 +79,7 @@ class TaskSerializer(serializers.ModelSerializer):
             "status",
             "priority",
             "project",
+            "workspace_slug",
             "project_slug",
             "created_by",
             "assignee",
@@ -89,11 +91,20 @@ class TaskSerializer(serializers.ModelSerializer):
         read_only_fields = ("slug", "project", "created_by", "assignee", "created_at", "updated_at")
 
     def create(self, validated_data):
-        project_slug = validated_data.pop("project_slug")
+        workspace_slug = validated_data.pop("workspace_slug", None)
+        project_slug = validated_data.pop("project_slug", None)
+        if not workspace_slug or not project_slug:
+            raise serializers.ValidationError(
+                {"detail": "Both workspace_slug and project_slug are required."}
+            )
         assignee_id = validated_data.pop("assignee_id", None)
         request = self.context["request"]
         try:
-            project = get_project_by_slug(slug=project_slug, user=request.user)
+            project = get_workspace_project_by_slug(
+                workspace_slug=workspace_slug,
+                project_slug=project_slug,
+                user=request.user,
+            )
             assignee = User.objects.filter(id=assignee_id).first() if assignee_id else None
             return create_task(
                 project=project,
@@ -119,6 +130,8 @@ class TaskSerializer(serializers.ModelSerializer):
 
 
 class CommentSerializer(serializers.ModelSerializer):
+    workspace_slug = serializers.SlugField(write_only=True)
+    project_slug = serializers.SlugField(write_only=True)
     task_slug = serializers.SlugField(write_only=True)
     author = serializers.CharField(source="author.username", read_only=True)
     text = serializers.SerializerMethodField()
@@ -126,17 +139,35 @@ class CommentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Comment
-        fields = ("id", "task_slug", "author", "text", "raw_text", "created_at", "updated_at", "is_deleted")
+        fields = (
+            "id",
+            "workspace_slug",
+            "project_slug",
+            "task_slug",
+            "author",
+            "text",
+            "raw_text",
+            "created_at",
+            "updated_at",
+            "is_deleted",
+        )
         read_only_fields = ("id", "author", "text", "created_at", "updated_at", "is_deleted")
 
     def get_text(self, obj):
         return "[deleted]" if obj.is_deleted else obj.text
 
     def create(self, validated_data):
+        workspace_slug = validated_data.pop("workspace_slug")
+        project_slug = validated_data.pop("project_slug")
         task_slug = validated_data.pop("task_slug")
         request = self.context["request"]
         try:
-            task = get_task_by_slug(slug=task_slug, user=request.user)
+            task = get_project_task_by_slug(
+                workspace_slug=workspace_slug,
+                project_slug=project_slug,
+                task_slug=task_slug,
+                user=request.user,
+            )
             return add_comment(task=task, author=request.user, text=validated_data["text"])
         except (Task.DoesNotExist, DomainError) as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc

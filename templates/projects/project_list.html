@@ -8,7 +8,7 @@
     <ul>
         {% for project in projects %}
             <li>
-                <a href="{% url 'project-detail' slug=project.slug %}">{{ project.name }}</a>
+                <a href="{% url 'project-detail' workspace_slug=workspace.slug project_slug=project.slug %}">{{ project.name }}</a>
                 {% if project.is_archived %}(archived){% endif %}
             </li>
         {% empty %}

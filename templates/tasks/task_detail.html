@@ -11,7 +11,7 @@
     <p>Assignee: {{ task.assignee.username|default:"Unassigned" }}</p>
     <p>Due date: {{ task.due_date|default:"Not set" }}</p>
     <p>{{ task.description|default:"No description." }}</p>
-    <p><a href="{% url 'task-edit' slug=task.slug %}">Edit task</a></p>
+    <p><a href="{% url 'task-edit' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">Edit task</a></p>
 </section>
 
 <section>
@@ -36,7 +36,7 @@
 
 <section>
     <h2>Add comment</h2>
-    <form action="{% url 'comment-create' slug=task.slug %}" method="post">
+    <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}" method="post">
         {% csrf_token %}
         {{ comment_form.as_p }}
         <button type="submit">Add comment</button>

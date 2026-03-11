@@ -55,6 +55,9 @@ class Membership(models.Model):
                 name="unique_workspace_membership",
             ),
         ]
+        indexes = [
+            models.Index(fields=["user", "workspace"]),
+        ]
         ordering = ("workspace", "user")
 
     def __str__(self) -> str:

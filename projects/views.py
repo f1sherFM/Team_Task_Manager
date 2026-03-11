@@ -9,7 +9,7 @@ from core.permissions import can_create_project
 from projects.forms import ProjectCreateForm
 from projects.models import Project
 from projects.selectors import (
-    get_project_by_slug,
+    get_workspace_project_by_slug,
     get_workspace_projects,
 )
 from projects.services import create_project
@@ -36,8 +36,9 @@ class ProjectAccessMixin(LoginRequiredMixin):
 
     def dispatch(self, request, *args, **kwargs):
         try:
-            self.project = get_project_by_slug(
-                slug=kwargs["slug"],
+            self.project = get_workspace_project_by_slug(
+                workspace_slug=kwargs["workspace_slug"],
+                project_slug=kwargs["project_slug"],
                 user=request.user,
             )
         except Project.DoesNotExist as exc:
@@ -70,7 +71,11 @@ class WorkspaceProjectListView(WorkspaceProjectAccessMixin, FormView):
             created_by=self.request.user,
         )
         messages.success(self.request, "Project created.")
-        return redirect("project-detail", slug=project.slug)
+        return redirect(
+            "project-detail",
+            workspace_slug=project.workspace.slug,
+            project_slug=project.slug,
+        )
 
 
 class ProjectDetailView(ProjectAccessMixin, TemplateView):

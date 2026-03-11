@@ -8,6 +8,6 @@
     <p>Workspace: {{ project.workspace.name }}</p>
     <p>Created by: {{ project.created_by.username }}</p>
     <p>{{ project.description|default:"No description." }}</p>
-    <p><a href="{% url 'project-task-list' project_slug=project.slug %}">View tasks</a></p>
+    <p><a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">View tasks</a></p>
 </section>
 {% endblock %}

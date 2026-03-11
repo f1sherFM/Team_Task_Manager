@@ -4,6 +4,10 @@ from comments.views import CommentCreateView, CommentDeleteView
 
 
 urlpatterns = [
-    path("tasks/<slug:slug>/comments/add/", CommentCreateView.as_view(), name="comment-create"),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/comments/add/",
+        CommentCreateView.as_view(),
+        name="comment-create",
+    ),
     path("comments/<int:comment_id>/delete/", CommentDeleteView.as_view(), name="comment-delete"),
 ]

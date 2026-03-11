@@ -4,7 +4,19 @@ from tasks.views import ProjectTaskListView, TaskDetailView, TaskUpdateView
 
 
 urlpatterns = [
-    path("projects/<slug:project_slug>/tasks/", ProjectTaskListView.as_view(), name="project-task-list"),
-    path("tasks/<slug:slug>/", TaskDetailView.as_view(), name="task-detail"),
-    path("tasks/<slug:slug>/edit/", TaskUpdateView.as_view(), name="task-edit"),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/",
+        ProjectTaskListView.as_view(),
+        name="project-task-list",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/",
+        TaskDetailView.as_view(),
+        name="task-detail",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/edit/",
+        TaskUpdateView.as_view(),
+        name="task-edit",
+    ),
 ]

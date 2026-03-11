@@ -38,16 +38,16 @@ TTM follows a strict domain architecture:
 
 ```text
 team_task_manager/
-├── accounts/
-├── activity/
-├── api/
-├── comments/
-├── core/
-├── projects/
-├── tasks/
-├── team_task_manager/
-├── templates/
-└── workspaces/
+|-- accounts/
+|-- activity/
+|-- api/
+|-- comments/
+|-- core/
+|-- projects/
+|-- tasks/
+|-- team_task_manager/
+|-- templates/
+`-- workspaces/
 ```
 
 Important files:
@@ -61,7 +61,7 @@ Important files:
 - `comments/services.py`: comment create and soft delete workflows
 - `activity/services.py`: append-only activity writer
 - `api/serializers.py`: thin serializers delegating writes to services
-- `api/views.py`: DRF viewsets and workspace activity endpoint
+- `api/views.py`: DRF endpoints and workspace activity API
 
 ## Where Domain Logic Lives
 
@@ -127,10 +127,10 @@ For Render, configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DEBUG=False`, and `A
 - `/workspaces/<slug>/members/`
 - `/workspaces/<slug>/activity/`
 - `/workspaces/<slug>/projects/`
-- `/projects/<slug>/`
-- `/projects/<slug>/tasks/`
-- `/tasks/<slug>/`
-- `/tasks/<slug>/edit/`
+- `/workspaces/<workspace_slug>/projects/<project_slug>/`
+- `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/`
+- `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
+- `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/edit/`
 
 ## API Endpoints
 
@@ -144,9 +144,9 @@ Resources:
 - `GET, POST /api/workspaces/`
 - `GET /api/workspaces/<slug>/`
 - `GET, POST /api/projects/`
-- `GET /api/projects/<slug>/`
+- `GET /api/workspaces/<workspace_slug>/projects/<project_slug>/`
 - `GET, POST /api/tasks/`
-- `GET, PATCH /api/tasks/<slug>/`
+- `GET, PATCH /api/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
 - `GET, POST /api/comments/`
 - `DELETE /api/comments/<id>/`
 - `GET /api/activity/`

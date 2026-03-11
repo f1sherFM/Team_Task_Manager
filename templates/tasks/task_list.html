@@ -8,7 +8,7 @@
     <ul>
         {% for task in tasks %}
             <li>
-                <a href="{% url 'task-detail' slug=task.slug %}">{{ task.title }}</a>
+                <a href="{% url 'task-detail' workspace_slug=project.workspace.slug project_slug=project.slug task_slug=task.slug %}">{{ task.title }}</a>
                 - {{ task.status }} / {{ task.priority }}
             </li>
         {% empty %}

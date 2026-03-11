@@ -52,7 +52,9 @@ class ApiPermissionTests(TestCase):
     def test_outsider_cannot_access_project_detail_api(self):
         self.client.force_authenticate(self.outsider)
 
-        response = self.client.get(f"/api/projects/{self.project.slug}/")
+        response = self.client.get(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/"
+        )
 
         self.assertEqual(response.status_code, 404)
 
@@ -60,7 +62,7 @@ class ApiPermissionTests(TestCase):
         self.client.force_authenticate(self.member)
 
         response = self.client.patch(
-            f"/api/tasks/{self.task.slug}/",
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/{self.task.slug}/",
             {"assignee_id": self.admin.id},
             format="json",
         )
@@ -72,7 +74,7 @@ class ApiPermissionTests(TestCase):
         self.client.force_authenticate(self.member)
 
         response = self.client.patch(
-            f"/api/tasks/{self.task.slug}/",
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/{self.task.slug}/",
             {"status": "done"},
             format="json",
         )

@@ -58,6 +58,9 @@ class Task(models.Model):
                 name="unique_task_slug_per_project",
             ),
         ]
+        indexes = [
+            models.Index(fields=["project", "status"]),
+        ]
         ordering = ("created_at",)
 
     def __str__(self) -> str:

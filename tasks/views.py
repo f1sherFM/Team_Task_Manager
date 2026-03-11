@@ -18,12 +18,12 @@ from tasks.forms import TaskCreateForm, TaskUpdateForm
 from tasks.models import Task
 from tasks.selectors import (
     get_project_task_candidates,
+    get_project_task_by_slug,
     get_project_tasks,
-    get_task_by_slug,
 )
 from tasks.services import assign_task, change_task_status, create_task
 from projects.models import Project
-from projects.selectors import get_project_by_slug
+from projects.selectors import get_workspace_project_by_slug
 
 
 class ProjectTaskAccessMixin(LoginRequiredMixin):
@@ -31,7 +31,11 @@ class ProjectTaskAccessMixin(LoginRequiredMixin):
 
     def dispatch(self, request, *args, **kwargs):
         try:
-            self.project = get_project_by_slug(slug=kwargs["project_slug"], user=request.user)
+            self.project = get_workspace_project_by_slug(
+                workspace_slug=kwargs["workspace_slug"],
+                project_slug=kwargs["project_slug"],
+                user=request.user,
+            )
         except Project.DoesNotExist as exc:
             raise Http404("Project not found.") from exc
         return super().dispatch(request, *args, **kwargs)
@@ -42,7 +46,12 @@ class TaskAccessMixin(LoginRequiredMixin):
 
     def dispatch(self, request, *args, **kwargs):
         try:
-            self.task = get_task_by_slug(slug=kwargs["slug"], user=request.user)
+            self.task = get_project_task_by_slug(
+                workspace_slug=kwargs["workspace_slug"],
+                project_slug=kwargs["project_slug"],
+                task_slug=kwargs["task_slug"],
+                user=request.user,
+            )
         except Task.DoesNotExist as exc:
             raise Http404("Task not found.") from exc
         return super().dispatch(request, *args, **kwargs)
@@ -83,7 +92,12 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
             return self.form_invalid(form)
 
         messages.success(self.request, "Task created.")
-        return redirect("task-detail", slug=task.slug)
+        return redirect(
+            "task-detail",
+            workspace_slug=task.project.workspace.slug,
+            project_slug=task.project.slug,
+            task_slug=task.slug,
+        )
 
 
 class TaskDetailView(TaskAccessMixin, TemplateView):
@@ -137,7 +151,12 @@ class TaskUpdateView(TaskAccessMixin, FormView):
             return self.form_invalid(form)
 
         messages.success(self.request, "Task updated.")
-        return redirect("task-detail", slug=self.task.slug)
+        return redirect(
+            "task-detail",
+            workspace_slug=self.task.project.workspace.slug,
+            project_slug=self.task.project.slug,
+            task_slug=self.task.slug,
+        )
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
