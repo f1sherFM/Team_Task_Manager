@@ -13,8 +13,13 @@
             <a href="{% url 'home' %}">TTM</a>
             {% if request.user.is_authenticated %}
                 <span>{{ request.user.username }}</span>
+                <form action="{% url 'logout' %}" method="post">
+                    {% csrf_token %}
+                    <button type="submit">Logout</button>
+                </form>
             {% else %}
-                <span>Authentication pages arrive in STEP 2.</span>
+                <a href="{% url 'login' %}">Login</a>
+                <a href="{% url 'signup' %}">Sign up</a>
             {% endif %}
         </nav>
     </header>
