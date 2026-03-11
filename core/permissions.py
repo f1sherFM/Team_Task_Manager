@@ -27,3 +27,11 @@ def can_manage_workspace(*, workspace, user) -> bool:
 
     membership = get_workspace_membership(workspace=workspace, user=user)
     return has_membership_role(membership, MembershipRole.OWNER, MembershipRole.ADMIN)
+
+
+def can_create_project(*, workspace, user) -> bool:
+    return can_manage_workspace(workspace=workspace, user=user)
+
+
+def can_view_project(*, project, user) -> bool:
+    return can_view_workspace(workspace=project.workspace, user=user)

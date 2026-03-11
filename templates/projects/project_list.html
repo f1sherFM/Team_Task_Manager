@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Projects | {{ workspace.name }}{% endblock %}
+
+{% block content %}
+<section>
+    <h1>Projects in {{ workspace.name }}</h1>
+    <ul>
+        {% for project in projects %}
+            <li>
+                <a href="{% url 'project-detail' slug=project.slug %}">{{ project.name }}</a>
+                {% if project.is_archived %}(archived){% endif %}
+            </li>
+        {% empty %}
+            <li>No projects yet.</li>
+        {% endfor %}
+    </ul>
+</section>
+
+{% if can_create_project %}
+<section>
+    <h2>Create project</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create project</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

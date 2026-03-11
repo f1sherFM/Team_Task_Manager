@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} | Team Task Manager{% endblock %}
+
+{% block content %}
+<section>
+    <h1>{{ project.name }}</h1>
+    <p>Workspace: {{ project.workspace.name }}</p>
+    <p>Created by: {{ project.created_by.username }}</p>
+    <p>{{ project.description|default:"No description." }}</p>
+</section>
+{% endblock %}
