@@ -8,6 +8,14 @@ from projects.models import Project
 User = get_user_model()
 
 
+def get_user_tasks(user) -> QuerySet[Task]:
+    return (
+        Task.objects.filter(project__workspace__memberships__user=user)
+        .select_related("project", "project__workspace", "created_by", "assignee")
+        .distinct()
+    )
+
+
 def get_project_tasks(*, project: Project) -> QuerySet[Task]:
     return (
         Task.objects.filter(project=project)
@@ -16,12 +24,7 @@ def get_project_tasks(*, project: Project) -> QuerySet[Task]:
 
 
 def get_task_by_slug(*, slug: str, user) -> Task:
-    return (
-        Task.objects.filter(project__workspace__memberships__user=user)
-        .select_related("project", "project__workspace", "created_by", "assignee")
-        .distinct()
-        .get(slug=slug)
-    )
+    return get_user_tasks(user).get(slug=slug)
 
 
 def get_project_task_candidates(*, project: Project) -> QuerySet[User]:

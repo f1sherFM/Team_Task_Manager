@@ -4,8 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from activity.models import ActivityLog
-from activity.selectors import get_workspace_activity
+from activity.selectors import get_user_activity, get_workspace_activity
 from api.permissions import CommentPermission, ProjectPermission, TaskPermission, WorkspacePermission
 from api.serializers import (
     ActivityLogSerializer,
@@ -14,7 +13,7 @@ from api.serializers import (
     TaskSerializer,
     WorkspaceSerializer,
 )
-from comments.models import Comment
+from comments.selectors import get_user_comments
 from comments.services import soft_delete_comment
 from core.exceptions import DomainError
 from projects.models import Project
@@ -50,11 +49,9 @@ class ProjectViewSet(
     lookup_field = "slug"
 
     def get_queryset(self):
-        queryset = (
-            Project.objects.filter(workspace__memberships__user=self.request.user)
-            .select_related("workspace", "created_by", "workspace__owner")
-            .distinct()
-        )
+        from projects.selectors import get_user_projects
+
+        queryset = get_user_projects(self.request.user)
         workspace_slug = self.request.query_params.get("workspace")
         if workspace_slug:
             queryset = queryset.filter(workspace__slug=workspace_slug)
@@ -73,11 +70,9 @@ class TaskViewSet(
     lookup_field = "slug"
 
     def get_queryset(self):
-        queryset = (
-            Task.objects.filter(project__workspace__memberships__user=self.request.user)
-            .select_related("project", "project__workspace", "created_by", "assignee")
-            .distinct()
-        )
+        from tasks.selectors import get_user_tasks
+
+        queryset = get_user_tasks(self.request.user)
         project_slug = self.request.query_params.get("project")
         if project_slug:
             queryset = queryset.filter(project__slug=project_slug)
@@ -94,13 +89,7 @@ class CommentViewSet(
     permission_classes = [CommentPermission]
 
     def get_queryset(self):
-        queryset = (
-            Comment.objects.filter(
-                task__project__workspace__memberships__user=self.request.user
-            )
-            .select_related("task", "author", "task__project", "task__project__workspace")
-            .distinct()
-        )
+        queryset = get_user_comments(self.request.user)
         task_slug = self.request.query_params.get("task")
         if task_slug:
             queryset = queryset.filter(task__slug=task_slug)
@@ -120,14 +109,7 @@ class ActivityViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return (
-            ActivityLog.objects.filter(
-                workspace__memberships__user=self.request.user
-            )
-            .select_related("workspace", "actor")
-            .distinct()
-            .order_by("-created_at")
-        )
+        return get_user_activity(self.request.user)
 
 
 class WorkspaceActivityAPIView(APIView):
