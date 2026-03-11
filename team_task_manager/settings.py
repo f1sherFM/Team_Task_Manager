@@ -2,17 +2,33 @@ import os
 from pathlib import Path
 
 import dj_database_url
+from dotenv import load_dotenv
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+load_dotenv(BASE_DIR / ".env")
+
+
+def env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+database_url = os.getenv("DATABASE_URL")
+default_sqlite_url = f"sqlite:///{BASE_DIR / 'db.sqlite3'}"
+ssl_required_default = bool(
+    database_url and "render.com" in database_url and database_url.startswith("postgres")
+)
 
 SECRET_KEY = os.getenv(
     "DJANGO_SECRET_KEY",
     "django-insecure-a!!w%ka5hor$9@ir^5e)25rbni&b&qjj(5(8tzsngwztl1(7)j",
 )
-DEBUG = os.getenv("DEBUG", "True").lower() == "true"
+DEBUG = env_bool("DEBUG", True)
 ALLOWED_HOSTS = os.getenv("ALLOWED_HOSTS", "127.0.0.1,localhost").split(",")
 
 INSTALLED_APPS = [
@@ -67,8 +83,9 @@ WSGI_APPLICATION = "team_task_manager.wsgi.application"
 DATABASES = {
     "default": dj_database_url.config(
         env="DATABASE_URL",
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
+        default=default_sqlite_url,
         conn_max_age=600,
+        ssl_require=env_bool("DB_SSL_REQUIRE", ssl_required_default),
     )
 }
 

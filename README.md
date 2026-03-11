@@ -96,6 +96,7 @@ copy .env.example .env
 ```
 
 4. Update `DATABASE_URL` and `DJANGO_SECRET_KEY` in `.env`.
+   `.env` is loaded automatically by Django settings, so local commands use the configured database without manual environment export.
 5. Run migrations:
 
 ```bash
@@ -122,9 +123,11 @@ Example local PostgreSQL value:
 
 ```env
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/team_task_manager
+DB_SSL_REQUIRE=False
 ```
 
 For Render, configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DEBUG=False`, and `ALLOWED_HOSTS`.
+For external Render Postgres connections, set `DB_SSL_REQUIRE=True` if your URL does not already include SSL parameters.
 
 ## HTML Pages
 
