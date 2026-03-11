@@ -2,13 +2,35 @@ import os
 from pathlib import Path
 
 import dj_database_url
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    load_dotenv = None
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
-load_dotenv(BASE_DIR / ".env")
+
+
+def load_local_env(env_path: Path) -> None:
+    if load_dotenv is not None:
+        load_dotenv(env_path)
+        return
+
+    if not env_path.exists():
+        return
+
+    for raw_line in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+load_local_env(BASE_DIR / ".env")
 
 
 def env_bool(name: str, default: bool = False) -> bool:
