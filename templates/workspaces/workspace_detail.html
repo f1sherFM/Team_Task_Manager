@@ -8,6 +8,7 @@
     <p>Slug: {{ workspace.slug }}</p>
     <p>Owner: {{ workspace.owner.username }}</p>
     <p><a href="{% url 'workspace-project-list' workspace_slug=workspace.slug %}">View projects</a></p>
+    <p><a href="{% url 'workspace-activity' slug=workspace.slug %}">View activity</a></p>
     <p><a href="{% url 'workspace-members' slug=workspace.slug %}">View members</a></p>
 </section>
 {% endblock %}

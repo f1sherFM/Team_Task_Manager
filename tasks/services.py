@@ -1,5 +1,6 @@
 from django.db import transaction
 
+from activity.services import log_activity
 from core.exceptions import DomainError
 from core.permissions import can_assign_task, can_change_task_status, can_create_task
 from core.slugs import generate_unique_slug
@@ -32,7 +33,7 @@ def create_task(
         value=title,
         scope={"project": project},
     )
-    return Task.objects.create(
+    task = Task.objects.create(
         project=project,
         title=title,
         slug=slug,
@@ -42,6 +43,15 @@ def create_task(
         assignee=assignee,
         due_date=due_date,
     )
+    log_activity(
+        workspace=project.workspace,
+        actor=created_by,
+        action="task_created",
+        target_type="task",
+        target_id=task.id,
+        metadata={"project_id": project.id, "task_title": task.title},
+    )
+    return task
 
 
 @transaction.atomic
@@ -52,8 +62,20 @@ def assign_task(*, task: Task, assignee, actor) -> Task:
     if assignee and not task.project.workspace.memberships.filter(user=assignee).exists():
         raise DomainError("Assignee must be a workspace member.")
 
+    previous_assignee_id = task.assignee_id
     task.assignee = assignee
     task.save(update_fields=["assignee", "updated_at"])
+    log_activity(
+        workspace=task.project.workspace,
+        actor=actor,
+        action="task_assigned",
+        target_type="task",
+        target_id=task.id,
+        metadata={
+            "previous_assignee_id": previous_assignee_id,
+            "assignee_id": assignee.id if assignee else None,
+        },
+    )
     return task
 
 
@@ -62,8 +84,17 @@ def change_task_status(*, task: Task, status: str, actor) -> Task:
     if not can_change_task_status(task=task, user=actor):
         raise DomainError("Status change requires admin access or assignee role.")
 
+    previous_status = task.status
     task.status = status
     task.save(update_fields=["status", "updated_at"])
+    log_activity(
+        workspace=task.project.workspace,
+        actor=actor,
+        action="task_status_changed",
+        target_type="task",
+        target_id=task.id,
+        metadata={"previous_status": previous_status, "status": status},
+    )
     return task
 
 
