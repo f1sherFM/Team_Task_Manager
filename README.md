@@ -1,0 +1,167 @@
+# Team Task Manager
+
+Team Task Manager (TTM) is a backend-first Django SaaS project for team workspaces, projects, tasks, comments, and audit activity.
+
+The project is intentionally built around service-oriented domain logic, selector-based reads, and centralized permission helpers instead of fat views or serializers.
+
+## Stack
+
+- Python 3.13
+- Django 5.1
+- Django REST Framework
+- Simple JWT
+- PostgreSQL via `DATABASE_URL`
+- Render-friendly static handling with WhiteNoise
+
+## Architecture
+
+TTM follows a strict domain architecture:
+
+- `services` handle all state changes and business workflows.
+- `selectors` handle read/query use cases.
+- `core.permissions` contains centralized authorization helpers.
+- views, forms, and serializers stay thin and delegate to services/selectors.
+- multi-model workflows use `transaction.atomic()`.
+
+### Domain apps
+
+- `accounts`: profile model and authentication pages
+- `workspaces`: workspaces, memberships, invitations
+- `projects`: projects inside workspaces
+- `tasks`: tasks, assignment, status changes
+- `comments`: task comments with soft delete
+- `activity`: append-only workspace activity log
+- `api`: DRF endpoints and JWT authentication
+- `core`: shared permissions, slug utilities, exceptions
+
+## Project Structure
+
+```text
+team_task_manager/
+├── accounts/
+├── activity/
+├── api/
+├── comments/
+├── core/
+├── projects/
+├── tasks/
+├── team_task_manager/
+├── templates/
+└── workspaces/
+```
+
+Important files:
+
+- `team_task_manager/settings.py`: project configuration, `DATABASE_URL`, DRF, static/media
+- `core/permissions.py`: shared permission checks
+- `core/slugs.py`: immutable slug generation helpers
+- `workspaces/services.py`: workspace ownership and invitation workflows
+- `projects/services.py`: project creation workflow
+- `tasks/services.py`: task creation, assignment, status change workflows
+- `comments/services.py`: comment create and soft delete workflows
+- `activity/services.py`: append-only activity writer
+- `api/serializers.py`: thin serializers delegating writes to services
+- `api/views.py`: DRF viewsets and workspace activity endpoint
+
+## Where Domain Logic Lives
+
+- Write logic lives in app services such as `workspaces/services.py`, `projects/services.py`, `tasks/services.py`, and `comments/services.py`.
+- Read logic lives in app selectors such as `workspaces/selectors.py`, `projects/selectors.py`, `tasks/selectors.py`, `comments/selectors.py`, and `activity/selectors.py`.
+- Permission rules live in `core/permissions.py`.
+- HTML views and DRF serializers call those layers instead of implementing business rules directly.
+
+## Quick Start
+
+1. Create and activate a virtual environment.
+2. Install dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+3. Copy environment settings:
+
+```bash
+copy .env.example .env
+```
+
+4. Update `DATABASE_URL` and `DJANGO_SECRET_KEY` in `.env`.
+5. Run migrations:
+
+```bash
+python manage.py migrate
+```
+
+6. Create a superuser:
+
+```bash
+python manage.py createsuperuser
+```
+
+7. Start the server:
+
+```bash
+python manage.py runserver
+```
+
+## PostgreSQL Setup
+
+TTM reads the database connection from `DATABASE_URL`.
+
+Example local PostgreSQL value:
+
+```env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/team_task_manager
+```
+
+For Render, configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DEBUG=False`, and `ALLOWED_HOSTS`.
+
+## HTML Pages
+
+- `/`
+- `/accounts/signup/`
+- `/accounts/login/`
+- `/workspaces/`
+- `/workspaces/create/`
+- `/workspaces/<slug>/`
+- `/workspaces/<slug>/members/`
+- `/workspaces/<slug>/activity/`
+- `/workspaces/<slug>/projects/`
+- `/projects/<slug>/`
+- `/projects/<slug>/tasks/`
+- `/tasks/<slug>/`
+- `/tasks/<slug>/edit/`
+
+## API Endpoints
+
+Authentication:
+
+- `POST /api/auth/token/`
+- `POST /api/auth/token/refresh/`
+
+Resources:
+
+- `GET, POST /api/workspaces/`
+- `GET /api/workspaces/<slug>/`
+- `GET, POST /api/projects/`
+- `GET /api/projects/<slug>/`
+- `GET, POST /api/tasks/`
+- `GET, PATCH /api/tasks/<slug>/`
+- `GET, POST /api/comments/`
+- `DELETE /api/comments/<id>/`
+- `GET /api/activity/`
+- `GET /api/workspaces/<slug>/activity/`
+
+Useful query params:
+
+- `/api/projects/?workspace=<workspace-slug>`
+- `/api/tasks/?project=<project-slug>`
+- `/api/comments/?task=<task-slug>`
+
+## Testing
+
+Run the service and API tests with:
+
+```bash
+python manage.py test workspaces tasks comments api
+```
