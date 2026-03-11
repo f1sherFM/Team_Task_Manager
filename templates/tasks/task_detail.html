@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}{{ task.title }} | Team Task Manager{% endblock %}
+
+{% block content %}
+<section>
+    <h1>{{ task.title }}</h1>
+    <p>Project: {{ task.project.name }}</p>
+    <p>Status: {{ task.status }}</p>
+    <p>Priority: {{ task.priority }}</p>
+    <p>Assignee: {{ task.assignee.username|default:"Unassigned" }}</p>
+    <p>Due date: {{ task.due_date|default:"Not set" }}</p>
+    <p>{{ task.description|default:"No description." }}</p>
+    <p><a href="{% url 'task-edit' slug=task.slug %}">Edit task</a></p>
+</section>
+{% endblock %}

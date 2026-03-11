@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block title %}Tasks | {{ project.name }}{% endblock %}
+
+{% block content %}
+<section>
+    <h1>Tasks in {{ project.name }}</h1>
+    <ul>
+        {% for task in tasks %}
+            <li>
+                <a href="{% url 'task-detail' slug=task.slug %}">{{ task.title }}</a>
+                - {{ task.status }} / {{ task.priority }}
+            </li>
+        {% empty %}
+            <li>No tasks yet.</li>
+        {% endfor %}
+    </ul>
+</section>
+
+{% if can_create_task %}
+<section>
+    <h2>Create task</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button type="submit">Create task</button>
+    </form>
+</section>
+{% endif %}
+{% endblock %}

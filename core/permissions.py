@@ -35,3 +35,22 @@ def can_create_project(*, workspace, user) -> bool:
 
 def can_view_project(*, project, user) -> bool:
     return can_view_workspace(workspace=project.workspace, user=user)
+
+
+def can_create_task(*, project, user) -> bool:
+    return can_view_project(project=project, user=user)
+
+
+def can_view_task(*, task, user) -> bool:
+    return can_view_project(project=task.project, user=user)
+
+
+def can_assign_task(*, task, user) -> bool:
+    return can_manage_workspace(workspace=task.project.workspace, user=user)
+
+
+def can_change_task_status(*, task, user) -> bool:
+    if can_manage_workspace(workspace=task.project.workspace, user=user):
+        return True
+
+    return getattr(task.assignee, "id", None) == getattr(user, "id", None)

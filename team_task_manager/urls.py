@@ -8,5 +8,6 @@ urlpatterns = [
     path("accounts/", include("accounts.urls")),
     path("workspaces/", include("workspaces.urls")),
     path("", include("projects.urls")),
+    path("", include("tasks.urls")),
     path("admin/", admin.site.urls),
 ]
