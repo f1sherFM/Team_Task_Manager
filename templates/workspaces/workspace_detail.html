@@ -3,12 +3,39 @@
 {% block title %}{{ workspace.name }} | Team Task Manager{% endblock %}
 
 {% block content %}
-<section>
-    <h1>{{ workspace.name }}</h1>
-    <p>Slug: {{ workspace.slug }}</p>
-    <p>Owner: {{ workspace.owner.username }}</p>
-    <p><a href="{% url 'workspace-project-list' workspace_slug=workspace.slug %}">View projects</a></p>
-    <p><a href="{% url 'workspace-activity' slug=workspace.slug %}">View activity</a></p>
-    <p><a href="{% url 'workspace-members' slug=workspace.slug %}">View members</a></p>
+<section class="py-2">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4 p-lg-5">
+            <div class="row g-4 align-items-start">
+                <div class="col-lg-8">
+                    <p class="text-uppercase small fw-semibold text-primary mb-2">Workspace</p>
+                    <h1 class="mb-3">{{ workspace.name }}</h1>
+                    <p class="text-body-secondary mb-4">
+                        Use this workspace to manage members, projects, tasks, and the activity feed.
+                    </p>
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-primary" href="{% url 'workspace-project-list' workspace_slug=workspace.slug %}">View projects</a>
+                        <a class="btn btn-outline-secondary" href="{% url 'workspace-activity' slug=workspace.slug %}">View activity</a>
+                        <a class="btn btn-outline-secondary" href="{% url 'workspace-members' slug=workspace.slug %}">View members</a>
+                    </div>
+                </div>
+                <div class="col-lg-4">
+                    <div class="card bg-body-tertiary border-0 h-100">
+                        <div class="card-body">
+                            <h2 class="h5 mb-3">Workspace details</h2>
+                            <dl class="row mb-0">
+                                <dt class="col-sm-4">Slug</dt>
+                                <dd class="col-sm-8"><code>{{ workspace.slug }}</code></dd>
+                                <dt class="col-sm-4">Owner</dt>
+                                <dd class="col-sm-8">{{ workspace.owner.username }}</dd>
+                                <dt class="col-sm-4">Created</dt>
+                                <dd class="col-sm-8">{{ workspace.created_at|date:"M j, Y" }}</dd>
+                            </dl>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 {% endblock %}

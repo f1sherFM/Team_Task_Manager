@@ -3,12 +3,19 @@
 {% block title %}Edit Task | Team Task Manager{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Edit {{ task.title }}</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Save</button>
-    </form>
+<section class="row justify-content-center py-3">
+    <div class="col-lg-8">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h2 mb-3">Edit {{ task.title }}</h1>
+                <p class="text-body-secondary mb-4">Update task assignment, status, priority, and scheduling details.</p>
+                <form method="post" class="ttm-form">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit" class="btn btn-primary">Save changes</button>
+                </form>
+            </div>
+        </div>
+    </div>
 </section>
 {% endblock %}

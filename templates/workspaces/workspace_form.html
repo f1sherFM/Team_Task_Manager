@@ -3,12 +3,19 @@
 {% block title %}Create Workspace | Team Task Manager{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Create workspace</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Create</button>
-    </form>
+<section class="row justify-content-center py-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h2 mb-3">Create workspace</h1>
+                <p class="text-body-secondary mb-4">Workspaces group members, projects, tasks, and the activity feed.</p>
+                <form method="post" class="ttm-form">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit" class="btn btn-primary">Create workspace</button>
+                </form>
+            </div>
+        </div>
+    </div>
 </section>
 {% endblock %}

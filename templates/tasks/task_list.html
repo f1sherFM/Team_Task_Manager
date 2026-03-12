@@ -3,28 +3,66 @@
 {% block title %}Tasks | {{ project.name }}{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Tasks in {{ project.name }}</h1>
-    <ul>
-        {% for task in tasks %}
-            <li>
-                <a href="{% url 'task-detail' workspace_slug=project.workspace.slug project_slug=project.slug task_slug=task.slug %}">{{ task.title }}</a>
-                - {{ task.status }} / {{ task.priority }}
-            </li>
-        {% empty %}
-            <li>No tasks yet.</li>
-        {% endfor %}
-    </ul>
-</section>
+<section class="py-2">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="mb-1">Tasks in {{ project.name }}</h1>
+            <p class="text-body-secondary mb-0">Track status, priority, assignee, and due dates for this project.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'project-detail' workspace_slug=project.workspace.slug project_slug=project.slug %}">Back to project</a>
+    </div>
 
-{% if can_create_task %}
-<section>
-    <h2>Create task</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Create task</button>
-    </form>
+    <div class="row g-4">
+        <div class="{% if can_create_task %}col-xl-8{% else %}col-12{% endif %}">
+            <div class="row g-4">
+                {% for task in tasks %}
+                    <div class="col-md-6">
+                        <div class="card border-0 shadow-sm h-100">
+                            <div class="card-body d-flex flex-column">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+                                    <h2 class="h5 mb-0">
+                                        <a class="text-decoration-none" href="{% url 'task-detail' workspace_slug=project.workspace.slug project_slug=project.slug task_slug=task.slug %}">
+                                            {{ task.title }}
+                                        </a>
+                                    </h2>
+                                    <span class="badge text-bg-light border text-uppercase">{{ task.priority }}</span>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2 mb-3">
+                                    <span class="badge text-bg-primary">{{ task.status }}</span>
+                                    <span class="badge text-bg-secondary">{{ task.assignee.username|default:"Unassigned" }}</span>
+                                </div>
+                                <p class="text-body-secondary small mb-4">{{ task.description|default:"No description provided."|truncatechars:120 }}</p>
+                                <a class="btn btn-outline-primary mt-auto" href="{% url 'task-detail' workspace_slug=project.workspace.slug project_slug=project.slug task_slug=task.slug %}">Open task</a>
+                            </div>
+                        </div>
+                    </div>
+                {% empty %}
+                    <div class="col-12">
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body py-5 text-center">
+                                <h2 class="h5 mb-2">No tasks yet</h2>
+                                <p class="text-body-secondary mb-0">Create the first task to start tracking work in this project.</p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        {% if can_create_task %}
+            <div class="col-xl-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <h2 class="h4 mb-3">Create task</h2>
+                        <form method="post" class="ttm-form">
+                            {% csrf_token %}
+                            {{ form.as_p }}
+                            <button type="submit" class="btn btn-primary w-100">Create task</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
 </section>
-{% endif %}
 {% endblock %}

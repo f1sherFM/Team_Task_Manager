@@ -3,19 +3,34 @@
 {% block title %}Activity | {{ workspace.name }}{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Activity for {{ workspace.name }}</h1>
-    <ul>
-        {% for entry in activity_logs %}
-            <li>
-                <strong>{{ entry.action }}</strong>
-                by {{ entry.actor.username|default:"system" }}
-                at {{ entry.created_at }}
-                ({{ entry.target_type }} #{{ entry.target_id }})
-            </li>
-        {% empty %}
-            <li>No activity yet.</li>
-        {% endfor %}
-    </ul>
+<section class="py-2">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="mb-1">Activity for {{ workspace.name }}</h1>
+            <p class="text-body-secondary mb-0">Newest events first, recorded from domain services.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'workspace-detail' slug=workspace.slug %}">Back to workspace</a>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="list-group list-group-flush">
+            {% for entry in activity_logs %}
+                <div class="list-group-item px-4 py-3">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
+                        <div>
+                            <div class="fw-semibold mb-1">{{ entry.action }}</div>
+                            <div class="text-body-secondary small">
+                                by {{ entry.actor.username|default:"system" }}
+                                for {{ entry.target_type }} #{{ entry.target_id }}
+                            </div>
+                        </div>
+                        <div class="small text-body-secondary">{{ entry.created_at|date:"M j, Y H:i" }}</div>
+                    </div>
+                </div>
+            {% empty %}
+                <div class="list-group-item px-4 py-5 text-center text-body-secondary">No activity yet.</div>
+            {% endfor %}
+        </div>
+    </div>
 </section>
 {% endblock %}

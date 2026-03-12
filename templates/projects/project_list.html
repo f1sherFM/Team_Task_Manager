@@ -3,28 +3,69 @@
 {% block title %}Projects | {{ workspace.name }}{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Projects in {{ workspace.name }}</h1>
-    <ul>
-        {% for project in projects %}
-            <li>
-                <a href="{% url 'project-detail' workspace_slug=workspace.slug project_slug=project.slug %}">{{ project.name }}</a>
-                {% if project.is_archived %}(archived){% endif %}
-            </li>
-        {% empty %}
-            <li>No projects yet.</li>
-        {% endfor %}
-    </ul>
-</section>
+<section class="py-2">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="mb-1">Projects in {{ workspace.name }}</h1>
+            <p class="text-body-secondary mb-0">Projects are grouped within a workspace and visible to workspace members.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'workspace-detail' slug=workspace.slug %}">Back to workspace</a>
+    </div>
 
-{% if can_create_project %}
-<section>
-    <h2>Create project</h2>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Create project</button>
-    </form>
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="table-responsive">
+                    <table class="table align-middle mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for project in projects %}
+                                <tr>
+                                    <td>
+                                        <a class="fw-medium text-decoration-none" href="{% url 'project-detail' workspace_slug=workspace.slug project_slug=project.slug %}">
+                                            {{ project.name }}
+                                        </a>
+                                    </td>
+                                    <td>
+                                        {% if project.is_archived %}
+                                            <span class="badge text-bg-secondary">Archived</span>
+                                        {% else %}
+                                            <span class="badge text-bg-success">Active</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-body-secondary">{{ project.created_at|date:"M j, Y" }}</td>
+                                </tr>
+                            {% empty %}
+                                <tr>
+                                    <td colspan="3" class="text-center py-5 text-body-secondary">No projects yet.</td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        {% if can_create_project %}
+            <div class="col-lg-4">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body p-4">
+                        <h2 class="h4 mb-3">Create project</h2>
+                        <form method="post" class="ttm-form">
+                            {% csrf_token %}
+                            {{ form.as_p }}
+                            <button type="submit" class="btn btn-primary w-100">Create project</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
 </section>
-{% endif %}
 {% endblock %}

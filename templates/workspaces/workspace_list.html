@@ -3,15 +3,37 @@
 {% block title %}Workspaces | Team Task Manager{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Your workspaces</h1>
-    <p><a href="{% url 'workspace-create' %}">Create workspace</a></p>
-    <ul>
+<section class="py-2">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="mb-1">Your workspaces</h1>
+            <p class="text-body-secondary mb-0">Manage membership, projects, tasks, and workspace activity.</p>
+        </div>
+        <a class="btn btn-primary" href="{% url 'workspace-create' %}">Create workspace</a>
+    </div>
+
+    <div class="row g-4">
         {% for workspace in workspaces %}
-            <li><a href="{% url 'workspace-detail' slug=workspace.slug %}">{{ workspace.name }}</a></li>
+            <div class="col-md-6 col-xl-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body d-flex flex-column">
+                        <h2 class="h5 card-title mb-2">{{ workspace.name }}</h2>
+                        <p class="text-body-secondary small mb-4">Slug: <code>{{ workspace.slug }}</code></p>
+                        <a class="btn btn-outline-primary mt-auto" href="{% url 'workspace-detail' slug=workspace.slug %}">Open workspace</a>
+                    </div>
+                </div>
+            </div>
         {% empty %}
-            <li>No workspaces yet.</li>
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-body py-5 text-center">
+                        <h2 class="h5 mb-2">No workspaces yet</h2>
+                        <p class="text-body-secondary mb-4">Create your first workspace to start organizing projects and tasks.</p>
+                        <a class="btn btn-primary" href="{% url 'workspace-create' %}">Create workspace</a>
+                    </div>
+                </div>
+            </div>
         {% endfor %}
-    </ul>
+    </div>
 </section>
 {% endblock %}

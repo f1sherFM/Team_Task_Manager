@@ -3,43 +3,109 @@
 {% block title %}{{ task.title }} | Team Task Manager{% endblock %}
 
 {% block content %}
-<section>
-    <h1>{{ task.title }}</h1>
-    <p>Project: {{ task.project.name }}</p>
-    <p>Status: {{ task.status }}</p>
-    <p>Priority: {{ task.priority }}</p>
-    <p>Assignee: {{ task.assignee.username|default:"Unassigned" }}</p>
-    <p>Due date: {{ task.due_date|default:"Not set" }}</p>
-    <p>{{ task.description|default:"No description." }}</p>
-    <p><a href="{% url 'task-edit' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">Edit task</a></p>
-</section>
+<section class="py-2">
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body p-4 p-lg-5">
+                    <div class="d-flex flex-column flex-md-row justify-content-between gap-3 mb-4">
+                        <div>
+                            <p class="text-uppercase small fw-semibold text-primary mb-2">Task</p>
+                            <h1 class="mb-2">{{ task.title }}</h1>
+                            <p class="text-body-secondary mb-0">{{ task.description|default:"No description." }}</p>
+                        </div>
+                        <div>
+                            <a class="btn btn-outline-primary" href="{% url 'task-edit' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">Edit task</a>
+                        </div>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="p-3 bg-body-tertiary rounded-4 h-100">
+                                <div class="small text-body-secondary mb-1">Status</div>
+                                <span class="badge text-bg-primary">{{ task.status }}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="p-3 bg-body-tertiary rounded-4 h-100">
+                                <div class="small text-body-secondary mb-1">Priority</div>
+                                <span class="badge text-bg-light border text-dark">{{ task.priority }}</span>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="p-3 bg-body-tertiary rounded-4 h-100">
+                                <div class="small text-body-secondary mb-1">Assignee</div>
+                                <div>{{ task.assignee.username|default:"Unassigned" }}</div>
+                            </div>
+                        </div>
+                        <div class="col-sm-6 col-xl-3">
+                            <div class="p-3 bg-body-tertiary rounded-4 h-100">
+                                <div class="small text-body-secondary mb-1">Due date</div>
+                                <div>{{ task.due_date|default:"Not set" }}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-<section>
-    <h2>Comments</h2>
-    <ul>
-        {% for comment in comments %}
-            <li>
-                <strong>{{ comment.author.username }}</strong>:
-                {{ comment.display_text }}
-                {% if not comment.is_deleted and comment.id in deletable_comment_ids %}
-                    <form action="{% url 'comment-delete' comment_id=comment.id %}" method="post">
+            <section>
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h2 class="h4 mb-0">Comments</h2>
+                    <span class="text-body-secondary small">{{ comments|length }} total</span>
+                </div>
+                <div class="d-grid gap-3">
+                    {% for comment in comments %}
+                        <article class="card border-0 shadow-sm">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+                                    <div>
+                                        <strong>{{ comment.author.username }}</strong>
+                                        <div class="small text-body-secondary">{{ comment.created_at|date:"M j, Y H:i" }}</div>
+                                    </div>
+                                    {% if not comment.is_deleted and comment.id in deletable_comment_ids %}
+                                        <form action="{% url 'comment-delete' comment_id=comment.id %}" method="post" class="m-0">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                        </form>
+                                    {% endif %}
+                                </div>
+                                <p class="mb-0 {% if comment.is_deleted %}text-body-secondary fst-italic{% endif %}">{{ comment.display_text }}</p>
+                            </div>
+                        </article>
+                    {% empty %}
+                        <div class="card border-0 shadow-sm">
+                            <div class="card-body text-center py-5 text-body-secondary">No comments yet.</div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </section>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm mb-4">
+                <div class="card-body">
+                    <h2 class="h5 mb-3">Task details</h2>
+                    <dl class="row mb-0">
+                        <dt class="col-5">Workspace</dt>
+                        <dd class="col-7">{{ task.project.workspace.name }}</dd>
+                        <dt class="col-5">Project</dt>
+                        <dd class="col-7">{{ task.project.name }}</dd>
+                        <dt class="col-5">Created</dt>
+                        <dd class="col-7">{{ task.created_at|date:"M j, Y" }}</dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-body p-4">
+                    <h2 class="h5 mb-3">Add comment</h2>
+                    <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}" method="post" class="ttm-form">
                         {% csrf_token %}
-                        <button type="submit">Delete</button>
+                        {{ comment_form.as_p }}
+                        <button type="submit" class="btn btn-primary w-100">Add comment</button>
                     </form>
-                {% endif %}
-            </li>
-        {% empty %}
-            <li>No comments yet.</li>
-        {% endfor %}
-    </ul>
-</section>
-
-<section>
-    <h2>Add comment</h2>
-    <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}" method="post">
-        {% csrf_token %}
-        {{ comment_form.as_p }}
-        <button type="submit">Add comment</button>
-    </form>
+                </div>
+            </div>
+        </div>
+    </div>
 </section>
 {% endblock %}

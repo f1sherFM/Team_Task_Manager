@@ -3,12 +3,19 @@
 {% block title %}Login | Team Task Manager{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Login</h1>
-    <form method="post">
-        {% csrf_token %}
-        {{ form.as_p }}
-        <button type="submit">Login</button>
-    </form>
+<section class="row justify-content-center py-4">
+    <div class="col-md-8 col-lg-5">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h2 mb-3">Login</h1>
+                <p class="text-body-secondary mb-4">Sign in to access your workspaces, projects, and tasks.</p>
+                <form method="post" class="ttm-form">
+                    {% csrf_token %}
+                    {{ form.as_p }}
+                    <button type="submit" class="btn btn-primary w-100">Login</button>
+                </form>
+            </div>
+        </div>
+    </div>
 </section>
 {% endblock %}

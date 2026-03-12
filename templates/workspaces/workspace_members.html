@@ -3,12 +3,38 @@
 {% block title %}Members | {{ workspace.name }}{% endblock %}
 
 {% block content %}
-<section>
-    <h1>Members of {{ workspace.name }}</h1>
-    <ul>
-        {% for membership in memberships %}
-            <li>{{ membership.user.username }} - {{ membership.role }}</li>
-        {% endfor %}
-    </ul>
+<section class="py-2">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
+        <div>
+            <h1 class="mb-1">Members of {{ workspace.name }}</h1>
+            <p class="text-body-secondary mb-0">Workspace access is managed through memberships and roles.</p>
+        </div>
+        <a class="btn btn-outline-secondary" href="{% url 'workspace-detail' slug=workspace.slug %}">Back to workspace</a>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="table-responsive">
+            <table class="table align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>User</th>
+                        <th>Role</th>
+                        <th>Joined</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for membership in memberships %}
+                        <tr>
+                            <td class="fw-medium">{{ membership.user.username }}</td>
+                            <td>
+                                <span class="badge text-bg-secondary">{{ membership.role }}</span>
+                            </td>
+                            <td class="text-body-secondary">{{ membership.joined_at|date:"M j, Y" }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
 </section>
 {% endblock %}
