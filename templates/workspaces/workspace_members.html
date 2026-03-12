@@ -14,7 +14,7 @@
 
     <div class="card border-0 shadow-sm">
         <div class="table-responsive">
-            <table class="table align-middle mb-0">
+            <table class="table table-striped table-hover align-middle mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>User</th>
@@ -27,9 +27,19 @@
                         <tr>
                             <td class="fw-medium">{{ membership.user.username }}</td>
                             <td>
-                                <span class="badge text-bg-secondary">{{ membership.role }}</span>
+                                {% if membership.role == "owner" %}
+                                    <span class="badge text-bg-dark">{{ membership.role }}</span>
+                                {% elif membership.role == "admin" %}
+                                    <span class="badge text-bg-info">{{ membership.role }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-secondary">{{ membership.role }}</span>
+                                {% endif %}
                             </td>
                             <td class="text-body-secondary">{{ membership.joined_at|date:"M j, Y" }}</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="3" class="text-center py-4 text-body-secondary">No members found.</td>
                         </tr>
                     {% endfor %}
                 </tbody>

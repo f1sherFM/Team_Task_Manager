@@ -25,10 +25,22 @@
                                             {{ task.title }}
                                         </a>
                                     </h2>
-                                    <span class="badge text-bg-light border text-uppercase">{{ task.priority }}</span>
+                                    {% if task.priority == "high" %}
+                                        <span class="badge text-bg-danger text-uppercase">{{ task.priority }}</span>
+                                    {% elif task.priority == "medium" %}
+                                        <span class="badge text-bg-warning text-uppercase">{{ task.priority }}</span>
+                                    {% else %}
+                                        <span class="badge text-bg-light border text-dark text-uppercase">{{ task.priority }}</span>
+                                    {% endif %}
                                 </div>
                                 <div class="d-flex flex-wrap gap-2 mb-3">
-                                    <span class="badge text-bg-primary">{{ task.status }}</span>
+                                    {% if task.status == "done" %}
+                                        <span class="badge text-bg-success">{{ task.status }}</span>
+                                    {% elif task.status == "in_progress" %}
+                                        <span class="badge text-bg-primary">{{ task.status }}</span>
+                                    {% else %}
+                                        <span class="badge text-bg-secondary">{{ task.status }}</span>
+                                    {% endif %}
                                     <span class="badge text-bg-secondary">{{ task.assignee.username|default:"Unassigned" }}</span>
                                 </div>
                                 <p class="text-body-secondary small mb-4">{{ task.description|default:"No description provided."|truncatechars:120 }}</p>
@@ -38,11 +50,12 @@
                     </div>
                 {% empty %}
                     <div class="col-12">
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body py-5 text-center">
-                                <h2 class="h5 mb-2">No tasks yet</h2>
-                                <p class="text-body-secondary mb-0">Create the first task to start tracking work in this project.</p>
-                            </div>
+                        <div class="alert alert-light border shadow-sm text-center py-4 mb-0">
+                            <h2 class="h5 mb-2">No tasks yet.</h2>
+                            <p class="text-body-secondary mb-3">Create the first task to start tracking work in this project.</p>
+                            {% if can_create_task %}
+                                <button type="button" class="btn btn-sm btn-outline-primary" disabled>Use the form to create a task</button>
+                            {% endif %}
                         </div>
                     </div>
                 {% endfor %}

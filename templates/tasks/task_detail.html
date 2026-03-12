@@ -22,13 +22,25 @@
                         <div class="col-sm-6 col-xl-3">
                             <div class="p-3 bg-body-tertiary rounded-4 h-100">
                                 <div class="small text-body-secondary mb-1">Status</div>
-                                <span class="badge text-bg-primary">{{ task.status }}</span>
+                                {% if task.status == "done" %}
+                                    <span class="badge text-bg-success">{{ task.status }}</span>
+                                {% elif task.status == "in_progress" %}
+                                    <span class="badge text-bg-primary">{{ task.status }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-secondary">{{ task.status }}</span>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="col-sm-6 col-xl-3">
                             <div class="p-3 bg-body-tertiary rounded-4 h-100">
                                 <div class="small text-body-secondary mb-1">Priority</div>
-                                <span class="badge text-bg-light border text-dark">{{ task.priority }}</span>
+                                {% if task.priority == "high" %}
+                                    <span class="badge text-bg-danger">{{ task.priority }}</span>
+                                {% elif task.priority == "medium" %}
+                                    <span class="badge text-bg-warning">{{ task.priority }}</span>
+                                {% else %}
+                                    <span class="badge text-bg-light border text-dark">{{ task.priority }}</span>
+                                {% endif %}
                             </div>
                         </div>
                         <div class="col-sm-6 col-xl-3">
@@ -72,8 +84,8 @@
                             </div>
                         </article>
                     {% empty %}
-                        <div class="card border-0 shadow-sm">
-                            <div class="card-body text-center py-5 text-body-secondary">No comments yet.</div>
+                        <div class="alert alert-light border shadow-sm text-center py-4 mb-0">
+                            <div class="text-body-secondary">No comments yet.</div>
                         </div>
                     {% endfor %}
                 </div>

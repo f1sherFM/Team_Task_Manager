@@ -25,10 +25,10 @@
             </div>
         {% empty %}
             <div class="col-12">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body py-5 text-center">
-                        <h2 class="h5 mb-2">No workspaces yet</h2>
-                        <p class="text-body-secondary mb-4">Create your first workspace to start organizing projects and tasks.</p>
+                <div class="alert alert-light border shadow-sm text-center py-4 mb-0">
+                    <h2 class="h5 mb-2">No workspaces yet.</h2>
+                    <p class="text-body-secondary mb-3">Create your first workspace to start organizing projects and tasks.</p>
+                    <div>
                         <a class="btn btn-primary" href="{% url 'workspace-create' %}">Create workspace</a>
                     </div>
                 </div>
