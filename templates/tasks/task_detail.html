@@ -23,11 +23,11 @@
                             <div class="p-3 bg-body-tertiary rounded-4 h-100">
                                 <div class="small text-body-secondary mb-1">Status</div>
                                 {% if task.status == "done" %}
-                                    <span class="badge text-bg-success">{{ task.status }}</span>
+                                    <span class="badge text-bg-success">Done</span>
                                 {% elif task.status == "in_progress" %}
-                                    <span class="badge text-bg-primary">{{ task.status }}</span>
+                                    <span class="badge text-bg-primary">In Progress</span>
                                 {% else %}
-                                    <span class="badge text-bg-secondary">{{ task.status }}</span>
+                                    <span class="badge text-bg-secondary">To Do</span>
                                 {% endif %}
                             </div>
                         </div>
@@ -35,11 +35,11 @@
                             <div class="p-3 bg-body-tertiary rounded-4 h-100">
                                 <div class="small text-body-secondary mb-1">Priority</div>
                                 {% if task.priority == "high" %}
-                                    <span class="badge text-bg-danger">{{ task.priority }}</span>
+                                    <span class="badge text-bg-danger">High</span>
                                 {% elif task.priority == "medium" %}
-                                    <span class="badge text-bg-warning">{{ task.priority }}</span>
+                                    <span class="badge text-bg-warning">Medium</span>
                                 {% else %}
-                                    <span class="badge text-bg-light border text-dark">{{ task.priority }}</span>
+                                    <span class="badge text-bg-light border text-dark">Low</span>
                                 {% endif %}
                             </div>
                         </div>

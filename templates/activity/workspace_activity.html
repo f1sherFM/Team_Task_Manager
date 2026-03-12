@@ -18,10 +18,22 @@
                 <div class="list-group-item px-4 py-3">
                     <div class="d-flex flex-column flex-md-row justify-content-between gap-2">
                         <div>
-                            <div class="fw-semibold mb-1">{{ entry.action }}</div>
+                            <div class="fw-semibold mb-1">
+                                {% if entry.action == "task_created" %}
+                                    Task Created
+                                {% elif entry.action == "task_assigned" %}
+                                    Task Assigned
+                                {% elif entry.action == "task_status_changed" %}
+                                    Task Status Changed
+                                {% elif entry.action == "comment_added" %}
+                                    Comment Added
+                                {% else %}
+                                    {{ entry.action }}
+                                {% endif %}
+                            </div>
                             <div class="text-body-secondary small">
                                 by {{ entry.actor.username|default:"system" }}
-                                for {{ entry.target_type }} #{{ entry.target_id }}
+                                for {{ entry.target_type|title }} #{{ entry.target_id }}
                             </div>
                         </div>
                         <div class="small text-body-secondary">{{ entry.created_at|date:"M j, Y H:i" }}</div>

@@ -28,11 +28,11 @@
                             <td class="fw-medium">{{ membership.user.username }}</td>
                             <td>
                                 {% if membership.role == "owner" %}
-                                    <span class="badge text-bg-dark">{{ membership.role }}</span>
+                                    <span class="badge text-bg-dark">Owner</span>
                                 {% elif membership.role == "admin" %}
-                                    <span class="badge text-bg-info">{{ membership.role }}</span>
+                                    <span class="badge text-bg-info">Admin</span>
                                 {% else %}
-                                    <span class="badge text-bg-secondary">{{ membership.role }}</span>
+                                    <span class="badge text-bg-secondary">Member</span>
                                 {% endif %}
                             </td>
                             <td class="text-body-secondary">{{ membership.joined_at|date:"M j, Y" }}</td>
