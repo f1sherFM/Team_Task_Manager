@@ -149,6 +149,54 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+## Docker Deployment
+
+The repository includes a production-oriented Docker setup for deploying the Django app against an external PostgreSQL database.
+
+Files:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `docker/entrypoint.sh`
+
+Recommended `.env` values for Docker on a VPS:
+
+```env
+DEBUG=False
+DJANGO_SECRET_KEY=change-me
+DATABASE_URL=postgresql://myuser:password@db-host:5432/myproject
+DB_SSL_REQUIRE=False
+ALLOWED_HOSTS=your-domain.com,server-ip
+CSRF_TRUSTED_ORIGINS=https://your-domain.com
+WEB_CONCURRENCY=3
+```
+
+Build and start:
+
+```bash
+docker compose up --build -d
+```
+
+The container startup flow runs:
+
+1. `python manage.py migrate --noinput`
+2. `python manage.py collectstatic --noinput`
+3. `gunicorn` with a Uvicorn worker on port `8000`
+
+Stop the service:
+
+```bash
+docker compose down
+```
+
+View logs:
+
+```bash
+docker compose logs -f web
+```
+
+For VPS deployment, place Nginx in front of the container and proxy requests to `127.0.0.1:8000`.
+
 ## PostgreSQL Setup
 
 TTM reads the database connection from `DATABASE_URL`.
