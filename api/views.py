@@ -75,8 +75,14 @@ class TaskViewSet(
 
         queryset = get_user_tasks(self.request.user)
         project_slug = self.request.query_params.get("project")
+        status_value = self.request.query_params.get("status")
+        assignee_id = self.request.query_params.get("assignee")
         if project_slug:
             queryset = queryset.filter(project__slug=project_slug)
+        if status_value:
+            queryset = queryset.filter(status=status_value)
+        if assignee_id:
+            queryset = queryset.filter(assignee_id=assignee_id)
         return queryset
 
 

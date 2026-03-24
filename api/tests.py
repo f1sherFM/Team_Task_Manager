@@ -207,3 +207,46 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         actions = [item["action"] for item in response.data["results"]]
         self.assertLess(actions.index("older_event"), actions.index("newer_event"))
+
+    def test_tasks_api_filters_by_status(self):
+        self.client.force_authenticate(self.member)
+        in_progress_task = create_task(
+            project=self.project,
+            title="In progress task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        assign_task(task=in_progress_task, assignee=self.member, actor=self.admin)
+        self.client.patch(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/{in_progress_task.slug}/",
+            {"status": "in_progress"},
+            format="json",
+        )
+
+        response = self.client.get("/api/tasks/", {"status": "in_progress"})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["slug"], in_progress_task.slug)
+
+    def test_tasks_api_filters_by_assignee(self):
+        self.client.force_authenticate(self.member)
+        assigned_task = create_task(
+            project=self.project,
+            title="Assigned task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        assign_task(task=assigned_task, assignee=self.admin, actor=self.admin)
+
+        response = self.client.get("/api/tasks/", {"assignee": self.admin.id})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["slug"], assigned_task.slug)
