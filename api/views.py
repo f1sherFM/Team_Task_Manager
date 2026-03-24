@@ -3,8 +3,6 @@ from rest_framework import generics, mixins, status, viewsets
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
-
 from activity.selectors import get_user_activity, get_workspace_activity
 from api.permissions import CommentPermission, ProjectPermission, TaskPermission, WorkspacePermission
 from api.serializers import (
@@ -110,17 +108,19 @@ class ActivityViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         return get_user_activity(self.request.user)
 
 
-class WorkspaceActivityAPIView(APIView):
+class WorkspaceActivityAPIView(generics.ListAPIView):
+    serializer_class = ActivityLogSerializer
     permission_classes = [IsAuthenticated]
 
-    def get(self, request, slug):
+    def get_queryset(self):
         try:
-            workspace = get_user_workspace_by_slug(slug=slug, user=request.user)
+            workspace = get_user_workspace_by_slug(
+                slug=self.kwargs["slug"],
+                user=self.request.user,
+            )
         except Workspace.DoesNotExist as exc:
             raise Http404("Workspace not found.") from exc
-
-        serializer = ActivityLogSerializer(get_workspace_activity(workspace), many=True)
-        return Response(serializer.data)
+        return get_workspace_activity(workspace)
 
 
 class ProjectDetailAPIView(generics.RetrieveAPIView):

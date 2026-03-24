@@ -2,6 +2,8 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from activity.models import ActivityLog
+from activity.services import log_activity
 from comments.services import add_comment
 from projects.services import create_project
 from tasks.services import assign_task, create_task
@@ -90,3 +92,22 @@ class ApiPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["results"][0]["text"], "[deleted]")
+
+    def test_workspace_activity_api_uses_paginated_list_format(self):
+        self.client.force_authenticate(self.member)
+        initial_count = ActivityLog.objects.filter(workspace=self.workspace).count()
+        for index in range(25):
+            log_activity(
+                workspace=self.workspace,
+                actor=self.member,
+                action=f"task_event_{index}",
+                target_type="task",
+                target_id=str(index),
+                metadata={"index": index},
+            )
+
+        response = self.client.get(f"/api/workspaces/{self.workspace.slug}/activity/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], initial_count + 25)
+        self.assertEqual(len(response.data["results"]), 20)
