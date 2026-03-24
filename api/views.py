@@ -1,5 +1,6 @@
 from django.http import Http404
 from rest_framework import generics, mixins, status, viewsets
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -97,7 +98,7 @@ class CommentViewSet(
         try:
             soft_delete_comment(comment=instance, actor=request.user)
         except DomainError as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            raise ValidationError({"detail": str(exc)}) from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
