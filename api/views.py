@@ -1,6 +1,7 @@
 from django.http import Http404
 from rest_framework import generics, mixins, status, viewsets
 from rest_framework.exceptions import ValidationError
+from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from activity.selectors import get_user_activity, get_workspace_activity
@@ -45,6 +46,8 @@ class ProjectViewSet(
     serializer_class = ProjectSerializer
     permission_classes = [ProjectPermission]
     lookup_field = "slug"
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["created_at"]
 
     def get_queryset(self):
         from projects.selectors import get_user_projects
@@ -64,6 +67,8 @@ class TaskViewSet(
     serializer_class = TaskSerializer
     permission_classes = [TaskPermission]
     lookup_field = "slug"
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["created_at"]
 
     def get_queryset(self):
         from tasks.selectors import get_user_tasks
@@ -103,6 +108,8 @@ class CommentViewSet(
 class ActivityViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = ActivityLogSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["created_at"]
 
     def get_queryset(self):
         return get_user_activity(self.request.user)
@@ -111,6 +118,8 @@ class ActivityViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 class WorkspaceActivityAPIView(generics.ListAPIView):
     serializer_class = ActivityLogSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [OrderingFilter]
+    ordering_fields = ["created_at"]
 
     def get_queryset(self):
         try:

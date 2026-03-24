@@ -1,11 +1,16 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 
 from activity.models import ActivityLog
 from activity.services import log_activity
 from comments.services import add_comment
+from projects.models import Project
 from projects.services import create_project
+from tasks.models import Task
 from tasks.services import assign_task, create_task
 from workspaces.models import Membership, MembershipRole
 from workspaces.services import create_workspace
@@ -111,3 +116,94 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], initial_count + 25)
         self.assertEqual(len(response.data["results"]), 20)
+
+    def test_projects_api_supports_created_at_ordering(self):
+        self.client.force_authenticate(self.member)
+        older_project = create_project(
+            workspace=self.workspace,
+            name="Older project",
+            description="Older",
+            created_by=self.owner,
+        )
+        newer_project = create_project(
+            workspace=self.workspace,
+            name="Newer project",
+            description="Newer",
+            created_by=self.owner,
+        )
+        base_time = timezone.now()
+        Project.objects.filter(workspace=self.workspace).update(created_at=base_time)
+        Project.objects.filter(id=older_project.id).update(created_at=base_time - timedelta(days=1))
+        Project.objects.filter(id=newer_project.id).update(created_at=base_time + timedelta(days=1))
+
+        response = self.client.get("/api/projects/", {"ordering": "-created_at", "workspace": self.workspace.slug})
+
+        self.assertEqual(response.status_code, 200)
+        returned_slugs = [item["slug"] for item in response.data["results"]]
+        self.assertLess(
+            returned_slugs.index(newer_project.slug),
+            returned_slugs.index(older_project.slug),
+        )
+
+    def test_tasks_api_supports_created_at_ordering(self):
+        self.client.force_authenticate(self.member)
+        older_task = create_task(
+            project=self.project,
+            title="Older task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        newer_task = create_task(
+            project=self.project,
+            title="Newer task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        base_time = timezone.now()
+        Task.objects.filter(project=self.project).update(created_at=base_time)
+        Task.objects.filter(id=older_task.id).update(created_at=base_time - timedelta(days=1))
+        Task.objects.filter(id=newer_task.id).update(created_at=base_time + timedelta(days=1))
+
+        response = self.client.get("/api/tasks/", {"ordering": "-created_at", "project": self.project.slug})
+
+        self.assertEqual(response.status_code, 200)
+        returned_slugs = [item["slug"] for item in response.data["results"]]
+        self.assertLess(
+            returned_slugs.index(newer_task.slug),
+            returned_slugs.index(older_task.slug),
+        )
+
+    def test_activity_api_supports_created_at_ordering(self):
+        self.client.force_authenticate(self.member)
+        older = log_activity(
+            workspace=self.workspace,
+            actor=self.member,
+            action="older_event",
+            target_type="task",
+            target_id="older",
+            metadata={},
+        )
+        newer = log_activity(
+            workspace=self.workspace,
+            actor=self.member,
+            action="newer_event",
+            target_type="task",
+            target_id="newer",
+            metadata={},
+        )
+        base_time = timezone.now()
+        ActivityLog.objects.filter(workspace=self.workspace).update(created_at=base_time)
+        ActivityLog.objects.filter(id=older.id).update(created_at=base_time - timedelta(days=1))
+        ActivityLog.objects.filter(id=newer.id).update(created_at=base_time + timedelta(days=1))
+
+        response = self.client.get("/api/activity/", {"ordering": "created_at"})
+
+        self.assertEqual(response.status_code, 200)
+        actions = [item["action"] for item in response.data["results"]]
+        self.assertLess(actions.index("older_event"), actions.index("newer_event"))
