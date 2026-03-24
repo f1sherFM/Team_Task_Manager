@@ -2,10 +2,13 @@ from django.db import transaction
 
 from activity.services import log_activity
 from core.exceptions import DomainError
-from core.permissions import can_assign_task, can_change_task_status, can_create_task
+from core.permissions import can_assign_task, can_change_task_status, can_create_task, can_view_task
 from core.slugs import create_with_unique_slug
 from tasks.models import Task
 from projects.models import Project
+
+
+UNSET = object()
 
 
 @transaction.atomic
@@ -94,6 +97,65 @@ def change_task_status(*, task: Task, status: str, actor) -> Task:
         target_id=task.id,
         metadata={"previous_status": previous_status, "status": status},
     )
+    return task
+
+
+@transaction.atomic
+def update_task(
+    *,
+    task: Task,
+    actor,
+    title=UNSET,
+    description=UNSET,
+    priority=UNSET,
+    due_date=UNSET,
+    assignee=UNSET,
+    status=UNSET,
+) -> Task:
+    task = update_task_details(
+        task=task,
+        actor=actor,
+        title=title,
+        description=description,
+        priority=priority,
+        due_date=due_date,
+    )
+
+    if assignee is not UNSET and assignee != task.assignee:
+        task = assign_task(task=task, assignee=assignee, actor=actor)
+    if status is not UNSET and status != task.status:
+        task = change_task_status(task=task, status=status, actor=actor)
+    return task
+
+
+def update_task_details(
+    *,
+    task: Task,
+    actor,
+    title=UNSET,
+    description=UNSET,
+    priority=UNSET,
+    due_date=UNSET,
+) -> Task:
+    if not can_view_task(task=task, user=actor):
+        raise DomainError("Task update requires workspace membership.")
+
+    update_fields = []
+    for field_name, value in (
+        ("title", title),
+        ("description", description),
+        ("priority", priority),
+        ("due_date", due_date),
+    ):
+        if value is UNSET or getattr(task, field_name) == value:
+            continue
+        setattr(task, field_name, value)
+        update_fields.append(field_name)
+
+    if not update_fields:
+        return task
+
+    task.save(update_fields=[*update_fields, "updated_at"])
     return task
 
 

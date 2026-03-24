@@ -10,7 +10,7 @@ from projects.selectors import get_workspace_project_by_slug
 from projects.services import create_project
 from tasks.models import Task
 from tasks.selectors import get_project_task_by_slug
-from tasks.services import assign_task, change_task_status, create_task
+from tasks.services import UNSET, create_task, update_task
 from workspaces.models import Workspace
 from workspaces.selectors import get_user_workspace_by_slug
 from workspaces.services import create_workspace
@@ -120,14 +120,21 @@ class TaskSerializer(serializers.ModelSerializer):
 
     def update(self, instance, validated_data):
         request = self.context["request"]
-        assignee_id = validated_data.pop("assignee_id", serializers.empty)
+        assignee_id = validated_data.pop("assignee_id", UNSET)
         try:
-            if assignee_id is not serializers.empty:
+            assignee = UNSET
+            if assignee_id is not UNSET:
                 assignee = User.objects.filter(id=assignee_id).first() if assignee_id else None
-                instance = assign_task(task=instance, assignee=assignee, actor=request.user)
-            if "status" in validated_data:
-                instance = change_task_status(task=instance, status=validated_data["status"], actor=request.user)
-            return instance
+            return update_task(
+                task=instance,
+                actor=request.user,
+                title=validated_data.get("title", UNSET),
+                description=validated_data.get("description", UNSET),
+                priority=validated_data.get("priority", UNSET),
+                due_date=validated_data.get("due_date", UNSET),
+                assignee=assignee,
+                status=validated_data.get("status", UNSET),
+            )
         except DomainError as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc
 
