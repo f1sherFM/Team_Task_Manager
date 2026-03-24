@@ -13,6 +13,32 @@ The project is intentionally built around service-oriented domain logic, selecto
 - PostgreSQL via `DATABASE_URL`
 - Render-friendly static handling with WhiteNoise
 
+## Screenshots
+
+### Workspaces
+
+![Workspace list](docs/screenshots/workspaces.png)
+
+### Workspace Overview
+
+![Workspace detail](docs/screenshots/workspace-detail.png)
+
+### Members
+
+![Workspace members](docs/screenshots/workspace-members.png)
+
+### Tasks
+
+![Task list](docs/screenshots/task-list.png)
+
+### Task Detail
+
+![Task detail](docs/screenshots/task-detail.png)
+
+### API Docs
+
+![Swagger UI](docs/screenshots/api-docs.png)
+
 ## Architecture
 
 TTM follows a strict domain architecture:
