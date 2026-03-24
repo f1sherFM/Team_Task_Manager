@@ -56,6 +56,13 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["slug"], self.workspace.slug)
 
+    def test_outsider_cannot_access_workspace_detail_api(self):
+        self.client.force_authenticate(self.outsider)
+
+        response = self.client.get(f"/api/workspaces/{self.workspace.slug}/")
+
+        self.assertEqual(response.status_code, 404)
+
     def test_outsider_cannot_access_project_detail_api(self):
         self.client.force_authenticate(self.outsider)
 
@@ -97,6 +104,22 @@ class ApiPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["results"][0]["text"], "[deleted]")
+
+    def test_project_create_api_rejects_member_without_admin_role(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            "/api/projects/",
+            {
+                "name": "Forbidden project",
+                "description": "No access",
+                "workspace_slug": self.workspace.slug,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["detail"], "Project creation requires admin access.")
 
     def test_workspace_activity_api_uses_paginated_list_format(self):
         self.client.force_authenticate(self.member)
@@ -250,3 +273,56 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["slug"], assigned_task.slug)
+
+    def test_task_create_api_returns_validation_error_for_invalid_payload(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            "/api/tasks/",
+            {
+                "title": "Invalid task",
+                "priority": "urgent",
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("priority", response.data)
+
+    def test_task_detail_api_returns_404_for_invalid_slug(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.get(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/missing-task/"
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_task_patch_updates_only_provided_fields(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.patch(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/{self.task.slug}/",
+            {"description": "Updated description only"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.description, "Updated description only")
+        self.assertEqual(self.task.title, "Ship API")
+        self.assertEqual(self.task.status, "todo")
+
+    def test_task_patch_rejects_invalid_field(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.patch(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/{self.task.slug}/",
+            {"unexpected_field": "value"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("unexpected_field", response.data)
