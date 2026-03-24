@@ -202,7 +202,37 @@ Useful query params:
 
 - `/api/projects/?workspace=<workspace-slug>`
 - `/api/tasks/?project=<project-slug>`
+- `/api/tasks/?status=todo`
+- `/api/tasks/?assignee=<user-id>`
+- `/api/tasks/?ordering=-created_at`
+- `/api/projects/?ordering=created_at`
+- `/api/activity/?ordering=-created_at`
 - `/api/comments/?task=<task-slug>`
+
+Interactive API docs:
+
+- [Swagger UI](/api/docs/)
+- OpenAPI schema: `/api/schema/`
+
+API examples:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/auth/token/ \
+  -H "Content-Type: application/json" \
+  -d "{\"username\":\"owner\",\"password\":\"secret123\"}"
+```
+
+```bash
+curl http://127.0.0.1:8000/api/tasks/?project=backend\&status=todo\&ordering=-created_at \
+  -H "Authorization: Bearer <access-token>"
+```
+
+```bash
+curl -X PATCH http://127.0.0.1:8000/api/workspaces/engineering/projects/backend/tasks/ship-api/ \
+  -H "Authorization: Bearer <access-token>" \
+  -H "Content-Type: application/json" \
+  -d "{\"description\":\"Updated from API\"}"
+```
 
 ## Testing
 
