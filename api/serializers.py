@@ -93,6 +93,22 @@ class TaskSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("slug", "project", "created_by", "assignee", "created_at", "updated_at")
 
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        if self.instance is None:
+            return attrs
+
+        allowed_fields = {"title", "description", "priority", "due_date", "status", "assignee_id"}
+        invalid_fields = set(self.initial_data) - allowed_fields
+        if invalid_fields:
+            raise serializers.ValidationError(
+                {
+                    field_name: ["This field cannot be updated."]
+                    for field_name in sorted(invalid_fields)
+                }
+            )
+        return attrs
+
     def create(self, validated_data):
         workspace_slug = validated_data.pop("workspace_slug", None)
         project_slug = validated_data.pop("project_slug", None)
