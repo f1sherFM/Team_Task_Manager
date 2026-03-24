@@ -2,6 +2,8 @@ import os
 from pathlib import Path
 
 import dj_database_url
+import sentry_sdk
+from sentry_sdk.integrations.django import DjangoIntegration
 
 try:
     from dotenv import load_dotenv
@@ -55,6 +57,7 @@ SECRET_KEY = os.getenv(
     ),
 )
 DEBUG = env_bool("DEBUG", not IS_RENDER)
+SENTRY_DSN = os.getenv("SENTRY_DSN")
 
 allowed_hosts = [
     host.strip()
@@ -173,6 +176,18 @@ if IS_RENDER:
     SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
     SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", True)
     SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", True)
+
+if SENTRY_DSN:
+    sentry_sdk.init(
+        dsn=SENTRY_DSN,
+        integrations=[DjangoIntegration()],
+        environment=os.getenv(
+            "SENTRY_ENVIRONMENT",
+            "development" if DEBUG else "production",
+        ),
+        traces_sample_rate=float(os.getenv("SENTRY_TRACES_SAMPLE_RATE", "0")),
+        send_default_pii=True,
+    )
 
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
