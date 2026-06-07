@@ -1,0 +1,13 @@
+<div class="ttm-subnav mb-4">
+    <div class="d-flex flex-wrap gap-2">
+        <a class="ttm-subnav-link {% if active_section == 'project-overview' %}is-active{% endif %}" href="{% url 'project-detail' workspace_slug=project.workspace.slug project_slug=project.slug %}">
+            Overview
+        </a>
+        <a class="ttm-subnav-link {% if active_section == 'tasks' %}is-active{% endif %}" href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">
+            Tasks
+        </a>
+        <a class="ttm-subnav-link" href="{% url 'workspace-detail' slug=project.workspace.slug %}">
+            Workspace
+        </a>
+    </div>
+</div>

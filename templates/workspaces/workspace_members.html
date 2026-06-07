@@ -4,6 +4,9 @@
 
 {% block content %}
 <section class="py-2">
+    {% with active_section="members" %}
+        {% include "includes/workspace_tabs.html" %}
+    {% endwith %}
     <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3 mb-4">
         <div>
             <h1 class="mb-1">Members of {{ workspace.name }}</h1>

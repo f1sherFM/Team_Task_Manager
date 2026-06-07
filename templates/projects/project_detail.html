@@ -4,6 +4,9 @@
 
 {% block content %}
 <section class="py-2">
+    {% with active_section="project-overview" %}
+        {% include "includes/project_tabs.html" %}
+    {% endwith %}
     <div class="row g-4">
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm h-100">

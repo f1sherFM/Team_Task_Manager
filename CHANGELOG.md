@@ -13,12 +13,15 @@ for notable implementation milestones.
 - Read-only enforcement for archived projects across task and comment mutations.
 - Additional service-level and API-level tests for invitations, archive permissions, and archived project restrictions.
 - Invitation acceptance template at `templates/workspaces/invitation_accept.html`.
+- `/healthz/` and `/readyz/` operational endpoints for liveness and readiness checks.
+- GitHub Actions CI workflow for linting, Django checks, migration drift checks, and tests.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.
 - Task HTML editing now updates full task details through the shared task service workflow.
 - README now documents invitation and archive endpoints and the archived project behavior.
 - Code style was normalized to pass `ruff check .`.
+- Render health checks now target `/healthz/` instead of the home page.
 
 ### Fixed
 - Invitation acceptance now validates the invited email against the authenticated user.

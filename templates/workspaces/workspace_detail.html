@@ -4,6 +4,9 @@
 
 {% block content %}
 <section class="py-2">
+    {% with active_section="overview" %}
+        {% include "includes/workspace_tabs.html" %}
+    {% endwith %}
     <div class="card border-0 shadow-sm">
         <div class="card-body p-4 p-lg-5">
             <div class="row g-4 align-items-start">
@@ -32,6 +35,26 @@
                                 <dd class="col-sm-8">{{ workspace.created_at|date:"M j, Y" }}</dd>
                             </dl>
                         </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row g-3 mt-1">
+                <div class="col-md-4">
+                    <div class="ttm-mini-stat">
+                        <div class="ttm-mini-stat-label">Projects</div>
+                        <div class="ttm-mini-stat-value">{{ workspace.projects.count }}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="ttm-mini-stat">
+                        <div class="ttm-mini-stat-label">Members</div>
+                        <div class="ttm-mini-stat-value">{{ workspace.memberships.count }}</div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="ttm-mini-stat">
+                        <div class="ttm-mini-stat-label">Invitations</div>
+                        <div class="ttm-mini-stat-value">{{ workspace.invitations.count }}</div>
                     </div>
                 </div>
             </div>

@@ -225,6 +225,7 @@ Deployment behavior on Render:
 - `DEBUG` defaults to `False` when the `RENDER` environment variable is present
 - `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` automatically include `RENDER_EXTERNAL_HOSTNAME`
 - secure proxy, HTTPS redirect, secure cookies, and HSTS are enabled on Render
+- Render health checks use `/healthz/`, while `/readyz/` is available for deeper dependency checks
 
 Blueprint flow:
 
@@ -248,6 +249,8 @@ Manual Render service values:
 ## HTML Pages
 
 - `/`
+- `/healthz/`
+- `/readyz/`
 - `/accounts/signup/`
 - `/accounts/login/`
 - `/workspaces/`
@@ -331,3 +334,26 @@ Run the service and API tests with:
 ```bash
 python manage.py test workspaces tasks comments api
 ```
+
+Useful operational checks:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python -m ruff check .
+```
+
+Health endpoints:
+
+- `GET /healthz/`: liveness probe for the Django process
+- `GET /readyz/`: readiness probe that verifies database access and unapplied migrations
+
+## CI
+
+GitHub Actions runs on pushes to `master` and on pull requests. The workflow:
+
+- installs project dependencies on Python 3.13
+- runs `ruff`
+- runs `python manage.py check`
+- verifies migrations are in sync
+- runs the Django test suite

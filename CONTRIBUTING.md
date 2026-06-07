@@ -54,6 +54,13 @@ python manage.py test
 python -m ruff check .
 ```
 
+8. Run deployment-oriented checks before opening a PR:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+```
+
 ## Coding Expectations
 
 - Keep domain logic in app services such as `workspaces/services.py`, `projects/services.py`, `tasks/services.py`, and `comments/services.py`.
@@ -70,6 +77,8 @@ When opening a pull request, please include:
 - the affected user or API behavior
 - notes about permissions, migrations, or backward compatibility
 - test coverage details
+
+GitHub Actions will run linting, Django checks, migration drift checks, and the full test suite.
 
 Good PR examples for this repository:
 

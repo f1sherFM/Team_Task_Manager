@@ -1,19 +1,103 @@
+:root {
+    --ttm-ink: #172033;
+    --ttm-slate: #5b6475;
+    --ttm-panel: rgba(255, 255, 255, 0.88);
+    --ttm-line: rgba(23, 32, 51, 0.08);
+    --ttm-brand: #1f4fd1;
+    --ttm-brand-deep: #132c73;
+    --ttm-accent: #f4b63d;
+    --ttm-success: #1a8f63;
+    --ttm-warning: #c57d12;
+}
+
 body {
+    font-family: "Manrope", "Segoe UI", sans-serif;
     background:
-        linear-gradient(180deg, rgba(248, 249, 250, 0.98), rgba(248, 249, 250, 0.98)),
-        radial-gradient(circle at top left, rgba(13, 110, 253, 0.12), transparent 30%),
-        radial-gradient(circle at bottom right, rgba(25, 135, 84, 0.1), transparent 25%);
-    color: #1f2937;
+        linear-gradient(180deg, rgba(247, 248, 251, 0.96), rgba(247, 248, 251, 0.98)),
+        radial-gradient(circle at top left, rgba(31, 79, 209, 0.16), transparent 28%),
+        radial-gradient(circle at 80% 20%, rgba(244, 182, 61, 0.12), transparent 22%),
+        radial-gradient(circle at bottom right, rgba(26, 143, 99, 0.12), transparent 26%);
+    color: var(--ttm-ink);
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+.navbar-brand {
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+}
+
+.ttm-navbar {
+    background:
+        linear-gradient(135deg, rgba(19, 44, 115, 0.98), rgba(23, 32, 51, 0.96));
 }
 
 .navbar-brand {
-    letter-spacing: 0.04em;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.ttm-brand-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 3rem;
+    height: 3rem;
+    border-radius: 1rem;
+    background: linear-gradient(135deg, rgba(244, 182, 61, 1), rgba(255, 230, 163, 0.95));
+    color: #1d2538;
+    font-weight: 800;
+    box-shadow: 0 0.75rem 1.6rem rgba(0, 0, 0, 0.18);
+}
+
+.ttm-brand-text {
+    color: #fff;
+    font-size: 1rem;
+    line-height: 1.1;
+}
+
+.ttm-navbar .nav-link {
+    color: rgba(255, 255, 255, 0.78);
+    font-weight: 600;
+}
+
+.ttm-navbar .nav-link:hover,
+.ttm-navbar .nav-link:focus {
+    color: #fff;
+}
+
+.ttm-nav-button {
+    border-radius: 999px;
+}
+
+.ttm-accent-button {
+    border-radius: 999px;
+    color: #1d2538;
+    font-weight: 700;
+}
+
+.ttm-user-pill {
+    color: rgba(255, 255, 255, 0.92) !important;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .card,
 .alert,
 .list-group-item {
     border-radius: 1rem;
+    border-color: var(--ttm-line);
+}
+
+.card {
+    background: var(--ttm-panel);
+    backdrop-filter: blur(8px);
 }
 
 .ttm-form p {
@@ -72,5 +156,143 @@ body {
 }
 
 code {
-    color: #0d6efd;
+    color: var(--ttm-brand);
+}
+
+.ttm-kicker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(31, 79, 209, 0.1);
+    color: var(--ttm-brand-deep);
+    font-size: 0.82rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.ttm-hero-panel {
+    overflow: hidden;
+    position: relative;
+}
+
+.ttm-hero-panel::after {
+    content: "";
+    position: absolute;
+    inset: auto -10% -25% auto;
+    width: 12rem;
+    height: 12rem;
+    border-radius: 999px;
+    background: radial-gradient(circle, rgba(244, 182, 61, 0.22), transparent 68%);
+}
+
+.ttm-panel-label {
+    color: var(--ttm-brand);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.ttm-stat-card {
+    padding: 1rem;
+    border-radius: 1rem;
+    background: rgba(31, 79, 209, 0.07);
+    border: 1px solid rgba(31, 79, 209, 0.1);
+}
+
+.ttm-stat-card-warning {
+    background: rgba(244, 182, 61, 0.12);
+    border-color: rgba(244, 182, 61, 0.18);
+}
+
+.ttm-stat-value {
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    font-size: 2rem;
+    line-height: 1;
+    margin-bottom: 0.35rem;
+}
+
+.ttm-stat-label {
+    color: var(--ttm-slate);
+    font-size: 0.9rem;
+    font-weight: 700;
+}
+
+.ttm-mini-panel {
+    display: block;
+    padding: 1rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.75);
+    border: 1px solid var(--ttm-line);
+    transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+}
+
+.ttm-mini-panel:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0.8rem 1.6rem rgba(23, 32, 51, 0.08);
+    border-color: rgba(31, 79, 209, 0.18);
+}
+
+.ttm-mini-code {
+    font-size: 0.75rem;
+    color: var(--ttm-brand);
+    font-weight: 700;
+}
+
+.ttm-subnav {
+    padding: 0.4rem;
+    border-radius: 1.15rem;
+    background: rgba(255, 255, 255, 0.68);
+    border: 1px solid var(--ttm-line);
+    backdrop-filter: blur(8px);
+}
+
+.ttm-subnav-link {
+    padding: 0.7rem 1rem;
+    border-radius: 0.9rem;
+    color: var(--ttm-slate);
+    text-decoration: none;
+    font-weight: 700;
+    transition: background-color 0.16s ease, color 0.16s ease;
+}
+
+.ttm-subnav-link:hover,
+.ttm-subnav-link:focus {
+    background: rgba(31, 79, 209, 0.08);
+    color: var(--ttm-brand-deep);
+}
+
+.ttm-subnav-link.is-active {
+    background: linear-gradient(135deg, rgba(31, 79, 209, 0.12), rgba(31, 79, 209, 0.18));
+    color: var(--ttm-brand-deep);
+}
+
+.ttm-mini-stat {
+    padding: 1rem;
+    border-radius: 1rem;
+    background: rgba(255, 255, 255, 0.7);
+    border: 1px solid var(--ttm-line);
+}
+
+.ttm-mini-stat-label {
+    color: var(--ttm-slate);
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    font-weight: 800;
+}
+
+.ttm-mini-stat-value {
+    font-family: "Space Grotesk", "Segoe UI", sans-serif;
+    font-size: 1.8rem;
+    margin-top: 0.3rem;
+}
+
+@media (max-width: 991.98px) {
+    .ttm-brand-text {
+        font-size: 0.92rem;
+    }
 }

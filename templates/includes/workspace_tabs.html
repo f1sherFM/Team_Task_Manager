@@ -1,0 +1,16 @@
+<div class="ttm-subnav mb-4">
+    <div class="d-flex flex-wrap gap-2">
+        <a class="ttm-subnav-link {% if active_section == 'overview' %}is-active{% endif %}" href="{% url 'workspace-detail' slug=workspace.slug %}">
+            Overview
+        </a>
+        <a class="ttm-subnav-link {% if active_section == 'projects' %}is-active{% endif %}" href="{% url 'workspace-project-list' workspace_slug=workspace.slug %}">
+            Projects
+        </a>
+        <a class="ttm-subnav-link {% if active_section == 'members' %}is-active{% endif %}" href="{% url 'workspace-members' slug=workspace.slug %}">
+            Members
+        </a>
+        <a class="ttm-subnav-link {% if active_section == 'activity' %}is-active{% endif %}" href="{% url 'workspace-activity' slug=workspace.slug %}">
+            Activity
+        </a>
+    </div>
+</div>

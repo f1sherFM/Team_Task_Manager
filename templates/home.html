@@ -6,47 +6,172 @@
 <section class="py-4 py-lg-5">
     <div class="row align-items-center g-4">
         <div class="col-lg-7">
-            <span class="badge rounded-pill text-bg-primary mb-3">Backend Portfolio Project</span>
-            <h1 class="display-5 fw-semibold mb-3">Team Task Manager</h1>
+            <span class="ttm-kicker mb-3">Backend Portfolio Project</span>
+            <h1 class="display-4 mb-3">Team task management with a backend-first mindset.</h1>
             <p class="lead text-body-secondary mb-4">
-                Team Task Manager - workspace-based task management backend built with Django and DRF.
+                Team Task Manager pairs a clean Django domain architecture with a practical,
+                server-rendered interface for workspaces, projects, tasks, comments, and audit activity.
             </p>
-            <div class="d-flex flex-wrap gap-2">
-                {% if request.user.is_authenticated %}
-                    <a class="btn btn-primary btn-lg" href="{% url 'workspace-list' %}">View Workspaces</a>
-                    <a class="btn btn-outline-secondary btn-lg" href="/api/docs/">API Docs</a>
-                {% else %}
-                    <a class="btn btn-primary btn-lg" href="{% url 'signup' %}">Create account</a>
+            {% if request.user.is_authenticated %}
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-primary btn-lg" href="{% url 'workspace-list' %}">Open workspace hub</a>
+                    <a class="btn btn-outline-secondary btn-lg" href="/api/docs/">Browse API docs</a>
+                </div>
+            {% else %}
+                <div class="d-flex flex-wrap gap-2">
+                    <a class="btn btn-warning btn-lg" href="{% url 'signup' %}">Create account</a>
                     <a class="btn btn-outline-secondary btn-lg" href="{% url 'login' %}">Sign in</a>
                     <a class="btn btn-outline-dark btn-lg" href="/api/docs/">API Docs</a>
-                {% endif %}
-            </div>
+                </div>
+            {% endif %}
         </div>
         <div class="col-lg-5">
-            <div class="card border-0 shadow-sm h-100">
-                <div class="card-body p-4">
-                    <h2 class="h4 mb-3">What you can manage</h2>
-                    <div class="list-group list-group-flush">
-                        <div class="list-group-item px-0">
-                            <strong>Workspaces</strong>
-                            <div class="text-body-secondary small">Team membership and access control.</div>
+            <div class="ttm-hero-panel card border-0 shadow-sm h-100">
+                <div class="card-body p-4 p-lg-5">
+                    {% if request.user.is_authenticated and dashboard %}
+                        <div class="d-flex justify-content-between align-items-start gap-3 mb-4">
+                            <div>
+                                <p class="ttm-panel-label mb-2">Snapshot</p>
+                                <h2 class="h3 mb-1">Your workspace hub</h2>
+                                <p class="text-body-secondary mb-0">Recent activity and upcoming work at a glance.</p>
+                            </div>
                         </div>
-                        <div class="list-group-item px-0">
-                            <strong>Projects</strong>
-                            <div class="text-body-secondary small">Structured work grouped inside each workspace.</div>
+                        <div class="row g-3">
+                            <div class="col-6">
+                                <div class="ttm-stat-card">
+                                    <div class="ttm-stat-value">{{ dashboard.workspace_count }}</div>
+                                    <div class="ttm-stat-label">Workspaces</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="ttm-stat-card">
+                                    <div class="ttm-stat-value">{{ dashboard.active_project_count }}</div>
+                                    <div class="ttm-stat-label">Active projects</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="ttm-stat-card">
+                                    <div class="ttm-stat-value">{{ dashboard.in_progress_task_count }}</div>
+                                    <div class="ttm-stat-label">In progress</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="ttm-stat-card ttm-stat-card-warning">
+                                    <div class="ttm-stat-value">{{ dashboard.overdue_task_count }}</div>
+                                    <div class="ttm-stat-label">Overdue tasks</div>
+                                </div>
+                            </div>
                         </div>
-                        <div class="list-group-item px-0">
-                            <strong>Tasks and comments</strong>
-                            <div class="text-body-secondary small">Status, assignee, due dates, and discussion history.</div>
+                    {% else %}
+                        <h2 class="h4 mb-3">What you can manage</h2>
+                        <div class="list-group list-group-flush">
+                            <div class="list-group-item px-0">
+                                <strong>Workspaces</strong>
+                                <div class="text-body-secondary small">Team membership and access control.</div>
+                            </div>
+                            <div class="list-group-item px-0">
+                                <strong>Projects</strong>
+                                <div class="text-body-secondary small">Structured work grouped inside each workspace.</div>
+                            </div>
+                            <div class="list-group-item px-0">
+                                <strong>Tasks and comments</strong>
+                                <div class="text-body-secondary small">Status, assignee, due dates, and discussion history.</div>
+                            </div>
+                            <div class="list-group-item px-0">
+                                <strong>Activity feed</strong>
+                                <div class="text-body-secondary small">Append-only audit log for workspace events.</div>
+                            </div>
                         </div>
-                        <div class="list-group-item px-0">
-                            <strong>Activity feed</strong>
-                            <div class="text-body-secondary small">Append-only audit log for workspace events.</div>
-                        </div>
-                    </div>
+                    {% endif %}
                 </div>
             </div>
         </div>
     </div>
 </section>
+{% if request.user.is_authenticated and dashboard %}
+    <section class="pb-4 pb-lg-5">
+        <div class="row g-4">
+            <div class="col-xl-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <h2 class="h5 mb-0">Recent workspaces</h2>
+                            <a class="small text-decoration-none" href="{% url 'workspace-list' %}">See all</a>
+                        </div>
+                        <div class="d-grid gap-3">
+                            {% for workspace in dashboard.recent_workspaces %}
+                                <a class="ttm-mini-panel text-decoration-none" href="{% url 'workspace-detail' slug=workspace.slug %}">
+                                    <div class="d-flex justify-content-between gap-3">
+                                        <div>
+                                            <div class="fw-semibold text-dark">{{ workspace.name }}</div>
+                                            <div class="small text-body-secondary">{{ workspace.project_count }} projects · {{ workspace.member_count }} members</div>
+                                        </div>
+                                        <span class="ttm-mini-code">{{ workspace.slug }}</span>
+                                    </div>
+                                </a>
+                            {% empty %}
+                                <div class="text-body-secondary">No workspaces yet.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <h2 class="h5 mb-3">Due soon</h2>
+                        <div class="d-grid gap-3">
+                            {% for task in dashboard.due_soon_tasks %}
+                                <div class="ttm-mini-panel">
+                                    <div class="fw-semibold">{{ task.title }}</div>
+                                    <div class="small text-body-secondary">
+                                        {{ task.project.workspace.name }} / {{ task.project.name }}
+                                    </div>
+                                    <div class="small mt-2">
+                                        Due {{ task.due_date|date:"M j, Y" }}
+                                        {% if task.assignee %}
+                                            · {{ task.assignee.username }}
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="text-body-secondary">No upcoming deadlines.</div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-4">
+                <div class="card border-0 shadow-sm h-100">
+                    <div class="card-body p-4">
+                        <h2 class="h5 mb-3">Recent activity</h2>
+                        <div class="d-grid gap-3">
+                            {% for entry in dashboard.recent_activity %}
+                                <div class="ttm-mini-panel">
+                                    <div class="fw-semibold">{{ entry.action|title|cut:"_" }}</div>
+                                    <div class="small text-body-secondary">
+                                        {{ entry.workspace.name }} · {{ entry.created_at|date:"M j, Y H:i" }}
+                                    </div>
+                                </div>
+                            {% empty %}
+                                <div class="text-body-secondary">No activity yet.</div>
+                            {% endfor %}
+                        </div>
+                        {% if dashboard.pending_invitations %}
+                            <hr class="my-4">
+                            <h3 class="h6 mb-3">Pending invitations</h3>
+                            <div class="d-grid gap-2">
+                                {% for invitation in dashboard.pending_invitations %}
+                                    <div class="small text-body-secondary">
+                                        {{ invitation.email }} · {{ invitation.workspace.name }}
+                                    </div>
+                                {% endfor %}
+                            </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+{% endif %}
 {% endblock %}
