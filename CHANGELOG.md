@@ -21,6 +21,7 @@ for notable implementation milestones.
 - Added markdown checklist parsing for project briefs and task imports.
 - Agent automation now supports listing tasks and updating or closing existing tasks.
 - Markdown briefs can now drive maintenance flows for existing tasks via `Task Action: update_task`.
+- Added Russian aliases for structured and markdown automation requests.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

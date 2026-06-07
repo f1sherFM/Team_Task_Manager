@@ -429,6 +429,19 @@ Task Action: update_task
   title: Refresh docs title
 ```
 
+Structured requests can also use Russian keys and values, for example:
+
+```text
+действие: создать задачу
+воркспейс: Engineering
+проект: Backend
+название: Добавить русскоязычный парсер
+описание: Проверить русские алиасы
+приоритет: высокий
+исполнитель: alice
+статус: в работе
+```
+
 Recommended usage for future Codex chats:
 
 - resolve the actor once with `--actor`
@@ -441,6 +454,7 @@ Recommended usage for future Codex chats:
 - prefer the structured `action/workspace/project/title/...` format when using `agent_capture_request`
 - use markdown checklists when a planning note already exists and the agent should turn it into concrete tasks
 - use `Task Action: update_task` in markdown briefs when the note should update or close existing tasks instead of creating new ones
+- feel free to write structured keys in Russian when that is more natural for the chat flow
 
 ## Testing
 

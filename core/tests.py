@@ -146,6 +146,26 @@ class AgentAutomationTests(TestCase):
         self.assertEqual(payload["workspace"], self.workspace.slug)
         self.assertEqual(payload["project"], self.project.slug)
 
+    def test_execute_agent_request_supports_russian_structured_task_request(self):
+        payload = execute_agent_request(
+            actor_ref="owner",
+            request_text=(
+                "действие: создать задачу\n"
+                "воркспейс: Engineering\n"
+                "проект: Backend Platform\n"
+                "название: Добавить русскоязычный парсер\n"
+                "описание: Проверить русские алиасы\n"
+                "приоритет: высокий\n"
+                "исполнитель: member\n"
+                "статус: в работе\n"
+            ),
+        )
+
+        self.assertEqual(payload["action"], "create_task")
+        self.assertEqual(payload["workspace"], self.workspace.slug)
+        self.assertEqual(payload["project"], self.project.slug)
+        self.assertEqual(payload["status"], TaskStatus.IN_PROGRESS)
+
     def test_agent_list_workspaces_command_outputs_json(self):
         call_command(
             "agent_list_workspaces",
@@ -346,6 +366,23 @@ class AgentAutomationTests(TestCase):
         self.assertIn("action: create_project", chunks[0])
         self.assertIn("title: Add parser support", chunks[1])
         self.assertIn("title: Add docs updates", chunks[2])
+
+    def test_parse_markdown_brief_supports_russian_metadata(self):
+        chunks = parse_markdown_brief(
+            request_text=(
+                "Воркспейс: Engineering\n"
+                "Проект: Backend Platform\n"
+                "Действие для задач: update_task\n"
+                "- [x] Ship markdown parser\n"
+                "  задача: Ship markdown parser\n"
+                "  приоритет: высокий\n"
+            )
+        )
+
+        self.assertEqual(len(chunks), 1)
+        self.assertIn("action: update_task", chunks[0])
+        self.assertIn("status: done", chunks[0])
+        self.assertIn("priority: высокий", chunks[0])
 
     def test_expand_agent_request_text_prefers_markdown_brief_when_no_separator(self):
         chunks = expand_agent_request_text(

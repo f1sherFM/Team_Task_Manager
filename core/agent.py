@@ -19,6 +19,83 @@ from workspaces.selectors import get_user_workspaces
 
 User = get_user_model()
 
+KEY_ALIASES = {
+    "workspace": "workspace",
+    "workspace_slug": "workspace",
+    "воркспейс": "workspace",
+    "пространство": "workspace",
+    "project": "project",
+    "project_slug": "project",
+    "проект": "project",
+    "task": "task",
+    "task_slug": "task",
+    "задача": "task",
+    "title": "title",
+    "название": "title",
+    "name": "name",
+    "имя": "name",
+    "description": "description",
+    "описание": "description",
+    "priority": "priority",
+    "приоритет": "priority",
+    "due_date": "due_date",
+    "due-date": "due_date",
+    "deadline": "due_date",
+    "срок": "due_date",
+    "дедлайн": "due_date",
+    "assignee": "assignee",
+    "исполнитель": "assignee",
+    "status": "status",
+    "статус": "status",
+    "action": "action",
+    "действие": "action",
+    "task_action": "task_action",
+    "действие_для_задач": "task_action",
+}
+
+ACTION_ALIASES = {
+    "create_project": "create_project",
+    "create project": "create_project",
+    "создать_проект": "create_project",
+    "создать проект": "create_project",
+    "create_task": "create_task",
+    "create task": "create_task",
+    "создать_задачу": "create_task",
+    "создать задачу": "create_task",
+    "update_task": "update_task",
+    "update task": "update_task",
+    "обновить_задачу": "update_task",
+    "обновить задачу": "update_task",
+    "close_task": "close_task",
+    "close task": "close_task",
+    "закрыть_задачу": "close_task",
+    "закрыть задачу": "close_task",
+}
+
+PRIORITY_ALIASES = {
+    "low": "low",
+    "низкий": "low",
+    "medium": "medium",
+    "средний": "medium",
+    "high": "high",
+    "высокий": "high",
+}
+
+STATUS_ALIASES = {
+    "todo": "todo",
+    "to_do": "todo",
+    "to do": "todo",
+    "к_выполнению": "todo",
+    "к выполнению": "todo",
+    "in_progress": "in_progress",
+    "in progress": "in_progress",
+    "в_работе": "in_progress",
+    "в работе": "in_progress",
+    "done": "done",
+    "готово": "done",
+    "завершено": "done",
+}
+
 
 @dataclass(frozen=True)
 class AgentParsedRequest:
@@ -380,35 +457,35 @@ def parse_agent_request(*, request_text: str) -> AgentParsedRequest:
     lower_request = normalized_request.lower()
     mapping = _parse_key_value_request(normalized_request)
 
-    action = mapping.get("action") or _infer_action(lower_request)
+    action = normalize_action(mapping.get("action") or _infer_action(lower_request))
     if action not in {"create_project", "create_task", "update_task", "close_task"}:
         raise DomainError("Could not determine which automation action to run.")
 
     workspace = mapping.get("workspace") or _extract_quoted_value(
         normalized_request,
-        keywords=("workspace", "workspace_slug"),
+        keywords=("workspace", "workspace_slug", "воркспейс", "пространство"),
     )
     project = mapping.get("project") or _extract_quoted_value(
         normalized_request,
-        keywords=("project", "project_slug"),
+        keywords=("project", "project_slug", "проект"),
     )
     task = mapping.get("task") or _extract_quoted_value(
         normalized_request,
-        keywords=("task", "task_slug"),
+        keywords=("task", "task_slug", "задача"),
     )
     title = mapping.get("title") or _extract_quoted_value(
         normalized_request,
-        keywords=("title",),
+        keywords=("title", "название"),
     )
     name = mapping.get("name") or _extract_quoted_value(
         normalized_request,
-        keywords=("project", "name"),
+        keywords=("project", "name", "проект", "имя"),
     )
     description = mapping.get("description", "")
-    priority = mapping.get("priority")
+    priority = normalize_priority(mapping.get("priority"))
     due_date = parse_optional_date(mapping.get("due_date"))
     assignee = mapping.get("assignee")
-    status = mapping.get("status")
+    status = normalize_status(mapping.get("status"))
 
     if action == "create_task" and priority is None:
         priority = TaskPriority.MEDIUM
@@ -495,7 +572,7 @@ def parse_markdown_brief(*, request_text: str) -> list[str]:
             continue
 
         key, value = stripped.split(":", 1)
-        normalized_key = key.strip().lower().replace(" ", "_")
+        normalized_key = normalize_key(key)
         cleaned_value = value.strip()
 
         if current_task is not None and normalized_key in {
@@ -537,9 +614,9 @@ def parse_markdown_brief(*, request_text: str) -> list[str]:
                 project_lines.append(f"description: {metadata['description']}")
             chunks.append("\n".join(project_lines))
 
-    default_task_action = metadata.get("task_action", "create_task")
+    default_task_action = normalize_action(metadata.get("task_action", "create_task"))
     for task_chunk in task_chunks:
-        task_action = task_chunk.get("action", default_task_action)
+        task_action = normalize_action(task_chunk.get("action", default_task_action))
         task_lines = [
             f"action: {task_action}",
             f"workspace: {metadata.get('workspace', '')}",
@@ -694,7 +771,7 @@ def _parse_key_value_request(request_text: str) -> dict[str, str]:
         if not line or ":" not in line:
             continue
         key, value = line.split(":", 1)
-        normalized_key = key.strip().lstrip("\ufeff").lower().replace(" ", "_")
+        normalized_key = normalize_key(key)
         cleaned_value = value.strip().strip('"').strip("'")
         if cleaned_value:
             mapping[normalized_key] = cleaned_value
@@ -706,6 +783,10 @@ def _infer_action(lower_request: str) -> str:
     project_markers = ("create project", "add project", "new project")
     update_task_markers = ("update task", "edit task")
     close_task_markers = ("close task", "complete task", "done task")
+    russian_task_markers = ("создай задачу", "добавь задачу", "новая задача")
+    russian_project_markers = ("создай проект", "добавь проект", "новый проект")
+    russian_update_markers = ("обнови задачу", "измени задачу")
+    russian_close_markers = ("закрой задачу", "заверши задачу")
     if any(marker in lower_request for marker in task_markers):
         return "create_task"
     if any(marker in lower_request for marker in project_markers):
@@ -714,7 +795,44 @@ def _infer_action(lower_request: str) -> str:
         return "update_task"
     if any(marker in lower_request for marker in close_task_markers):
         return "close_task"
+    if any(marker in lower_request for marker in russian_task_markers):
+        return "create_task"
+    if any(marker in lower_request for marker in russian_project_markers):
+        return "create_project"
+    if any(marker in lower_request for marker in russian_update_markers):
+        return "update_task"
+    if any(marker in lower_request for marker in russian_close_markers):
+        return "close_task"
     return ""
+
+
+def normalize_key(raw_key: str) -> str:
+    normalized_key = raw_key.strip().lstrip("\ufeff").lower().replace(" ", "_")
+    return KEY_ALIASES.get(normalized_key, normalized_key)
+
+
+def normalize_action(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    lowered = raw_value.strip().lower()
+    underscored = lowered.replace(" ", "_")
+    return ACTION_ALIASES.get(underscored, ACTION_ALIASES.get(lowered, raw_value))
+
+
+def normalize_priority(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    lowered = raw_value.strip().lower()
+    underscored = lowered.replace(" ", "_")
+    return PRIORITY_ALIASES.get(underscored, PRIORITY_ALIASES.get(lowered, raw_value))
+
+
+def normalize_status(raw_value: str | None) -> str | None:
+    if raw_value is None:
+        return None
+    lowered = raw_value.strip().lower()
+    underscored = lowered.replace(" ", "_")
+    return STATUS_ALIASES.get(underscored, STATUS_ALIASES.get(lowered, raw_value))
 
 
 def _extract_quoted_value(request_text: str, *, keywords: tuple[str, ...]) -> str | None:
