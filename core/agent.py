@@ -1,6 +1,7 @@
 import re
 from dataclasses import dataclass
 from datetime import date
+from pathlib import Path
 
 from django.contrib.auth import get_user_model
 from django.utils.dateparse import parse_date
@@ -202,8 +203,27 @@ def execute_agent_batch_request(
     ]
 
 
+def execute_agent_file_request(
+    *,
+    actor_ref: str,
+    file_path: str,
+    preview: bool = False,
+) -> list[dict]:
+    path = Path(file_path).expanduser()
+    if not path.exists():
+        raise DomainError(f'Agent request file "{file_path}" was not found.')
+    if not path.is_file():
+        raise DomainError(f'Agent request path "{file_path}" is not a file.')
+    request_text = path.read_text(encoding="utf-8")
+    return execute_agent_batch_request(
+        actor_ref=actor_ref,
+        request_text=request_text,
+        preview=preview,
+    )
+
+
 def parse_agent_request(*, request_text: str) -> AgentParsedRequest:
-    normalized_request = request_text.strip()
+    normalized_request = request_text.lstrip("\ufeff").strip()
     lower_request = normalized_request.lower()
     mapping = _parse_key_value_request(normalized_request)
 
@@ -366,7 +386,7 @@ def _parse_key_value_request(request_text: str) -> dict[str, str]:
         if not line or ":" not in line:
             continue
         key, value = line.split(":", 1)
-        normalized_key = key.strip().lower().replace(" ", "_")
+        normalized_key = key.strip().lstrip("\ufeff").lower().replace(" ", "_")
         cleaned_value = value.strip().strip('"').strip("'")
         if cleaned_value:
             mapping[normalized_key] = cleaned_value

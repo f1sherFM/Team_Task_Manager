@@ -17,6 +17,7 @@ for notable implementation milestones.
 - GitHub Actions CI workflow for linting, Django checks, migration drift checks, and tests.
 - Local agent automation commands for listing workspaces and projects and creating projects or tasks through Django services.
 - Agent capture requests now support preview mode and batch execution for safer Codex-driven automation.
+- Added file-based agent automation so local briefs can be previewed and applied directly.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

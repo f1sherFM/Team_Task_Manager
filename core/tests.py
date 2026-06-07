@@ -1,5 +1,6 @@
 import json
 from io import StringIO
+from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -11,6 +12,7 @@ from core.agent import (
     create_project_for_agent,
     create_task_for_agent,
     execute_agent_batch_request,
+    execute_agent_file_request,
     execute_agent_request,
     preview_agent_request,
 )
@@ -65,6 +67,7 @@ class ReadinessStatusTests(SimpleTestCase):
 class AgentAutomationTests(TestCase):
     def setUp(self):
         self.stdout = StringIO()
+        self.test_request_file = Path("C:/Team_Task_Manager/tmp_agent_request.txt")
         self.User = get_user_model()
         self.owner = self.User.objects.create_user(
             username="owner",
@@ -88,6 +91,10 @@ class AgentAutomationTests(TestCase):
             description="Primary backend project",
             created_by=self.owner,
         )
+
+    def tearDown(self):
+        if self.test_request_file.exists():
+            self.test_request_file.unlink()
 
     def test_create_project_for_agent_uses_domain_services(self):
         project = create_project_for_agent(
@@ -221,4 +228,41 @@ class AgentAutomationTests(TestCase):
 
         payload = json.loads(self.stdout.getvalue())
         self.assertEqual(payload[0]["title"], "Preview-only task")
+        self.assertEqual(payload[0]["project_slug"], self.project.slug)
+
+    def test_execute_agent_file_request_reads_and_applies_file(self):
+        self.test_request_file.write_text(
+            "action: create_task\n"
+            "workspace: Engineering\n"
+            "project: Backend Platform\n"
+            "title: Import task from file\n",
+            encoding="utf-8",
+        )
+
+        payload = execute_agent_file_request(
+            actor_ref="owner",
+            file_path=str(self.test_request_file),
+        )
+
+        self.assertEqual(payload[0]["title"], "Import task from file")
+
+    def test_agent_apply_file_command_supports_preview(self):
+        self.test_request_file.write_text(
+            "action: create_task\n"
+            "workspace: Engineering\n"
+            "project: Backend Platform\n"
+            "title: Preview file task\n",
+            encoding="utf-8",
+        )
+
+        call_command(
+            "agent_apply_file",
+            actor="owner",
+            file=str(self.test_request_file),
+            preview=True,
+            stdout=self.stdout,
+        )
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload[0]["title"], "Preview file task")
         self.assertEqual(payload[0]["project_slug"], self.project.slug)

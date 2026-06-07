@@ -376,11 +376,34 @@ project: Backend
 title: Add batch automation support"
 ```
 
+You can also keep the structured request in a local file and let Codex apply it directly:
+
+```bash
+python manage.py agent_apply_file --actor owner --file .\docs\agent-brief.txt --preview
+python manage.py agent_apply_file --actor owner --file .\docs\agent-brief.txt
+```
+
+Recommended file format:
+
+```text
+action: create_project
+workspace: Engineering
+name: Agent Extensions
+---
+action: create_task
+workspace: Engineering
+project: Backend
+title: Add batch automation support
+priority: high
+assignee: alice
+```
+
 Recommended usage for future Codex chats:
 
 - resolve the actor once with `--actor`
 - list accessible workspaces and projects through the agent commands
 - use `agent_capture_request --preview` before applying ambiguous or high-impact changes
+- use `agent_apply_file` when the chat already has a local brief, markdown note, or generated task plan
 - batch related creations in one call when they belong to the same user request
 - create the project or task through management commands instead of calling REST endpoints
 - prefer the structured `action/workspace/project/title/...` format when using `agent_capture_request`
