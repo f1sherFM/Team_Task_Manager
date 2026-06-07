@@ -9,6 +9,9 @@ from tasks.models import Task
 
 @transaction.atomic
 def add_comment(*, task: Task, author, text: str) -> Comment:
+    if task.project.is_archived:
+        raise DomainError("Comments cannot be changed in archived projects.")
+
     if not can_create_comment(task=task, user=author):
         raise DomainError("Only workspace members can comment on tasks.")
 
@@ -26,6 +29,9 @@ def add_comment(*, task: Task, author, text: str) -> Comment:
 
 @transaction.atomic
 def soft_delete_comment(*, comment: Comment, actor) -> Comment:
+    if comment.task.project.is_archived:
+        raise DomainError("Comments cannot be changed in archived projects.")
+
     if not can_delete_comment(comment=comment, user=actor):
         raise DomainError("Comment deletion requires author or admin access.")
 

@@ -13,6 +13,13 @@
     </div>
 
     <div class="row g-4">
+        {% if is_project_archived %}
+            <div class="col-12">
+                <div class="alert alert-warning border shadow-sm mb-0">
+                    This project is archived. Tasks remain visible, but task creation and edits are disabled.
+                </div>
+            </div>
+        {% endif %}
         <div class="{% if can_create_task %}col-xl-8{% else %}col-12{% endif %}">
             <div class="row g-4">
                 {% for task in tasks %}

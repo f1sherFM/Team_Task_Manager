@@ -15,9 +15,18 @@
                             <p class="text-body-secondary mb-0">{{ task.description|default:"No description." }}</p>
                         </div>
                         <div>
-                            <a class="btn btn-outline-primary" href="{% url 'task-edit' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">Edit task</a>
+                            {% if can_edit_task %}
+                                <a class="btn btn-outline-primary" href="{% url 'task-edit' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">Edit task</a>
+                            {% else %}
+                                <span class="badge text-bg-secondary">Archived project</span>
+                            {% endif %}
                         </div>
                     </div>
+                    {% if is_project_archived %}
+                        <div class="alert alert-warning border shadow-sm mb-4">
+                            This task belongs to an archived project. Task and comment changes are disabled.
+                        </div>
+                    {% endif %}
                     <div class="row g-3">
                         <div class="col-sm-6 col-xl-3">
                             <div class="p-3 bg-body-tertiary rounded-4 h-100">
@@ -110,11 +119,17 @@
             <div class="card border-0 shadow-sm">
                 <div class="card-body p-4">
                     <h2 class="h5 mb-3">Add comment</h2>
-                    <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}" method="post" class="ttm-form">
-                        {% csrf_token %}
-                        {{ comment_form.as_p }}
-                        <button type="submit" class="btn btn-primary w-100">Add comment</button>
-                    </form>
+                    {% if comment_form %}
+                        <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}" method="post" class="ttm-form">
+                            {% csrf_token %}
+                            {{ comment_form.as_p }}
+                            <button type="submit" class="btn btn-primary w-100">Add comment</button>
+                        </form>
+                    {% else %}
+                        <p class="text-body-secondary mb-0">
+                            Comments are read-only while the project is archived.
+                        </p>
+                    {% endif %}
                 </div>
             </div>
         </div>

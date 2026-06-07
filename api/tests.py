@@ -9,12 +9,11 @@ from activity.models import ActivityLog
 from activity.services import log_activity
 from comments.services import add_comment
 from projects.models import Project
-from projects.services import create_project
+from projects.services import archive_project, create_project
 from tasks.models import Task
 from tasks.services import assign_task, create_task
 from workspaces.models import Membership, MembershipRole
-from workspaces.services import create_workspace
-
+from workspaces.services import create_invitation, create_workspace
 
 User = get_user_model()
 
@@ -28,8 +27,16 @@ class ApiPermissionTests(TestCase):
         self.outsider = User.objects.create_user(username="outsider", password="secret123")
 
         self.workspace = create_workspace(owner=self.owner, name="Engineering")
-        Membership.objects.create(workspace=self.workspace, user=self.admin, role=MembershipRole.ADMIN)
-        Membership.objects.create(workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER)
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.admin,
+            role=MembershipRole.ADMIN,
+        )
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.member,
+            role=MembershipRole.MEMBER,
+        )
         self.project = create_project(
             workspace=self.workspace,
             name="Backend",
@@ -159,7 +166,10 @@ class ApiPermissionTests(TestCase):
         Project.objects.filter(id=older_project.id).update(created_at=base_time - timedelta(days=1))
         Project.objects.filter(id=newer_project.id).update(created_at=base_time + timedelta(days=1))
 
-        response = self.client.get("/api/projects/", {"ordering": "-created_at", "workspace": self.workspace.slug})
+        response = self.client.get(
+            "/api/projects/",
+            {"ordering": "-created_at", "workspace": self.workspace.slug},
+        )
 
         self.assertEqual(response.status_code, 200)
         returned_slugs = [item["slug"] for item in response.data["results"]]
@@ -193,7 +203,10 @@ class ApiPermissionTests(TestCase):
         Task.objects.filter(id=older_task.id).update(created_at=base_time - timedelta(days=1))
         Task.objects.filter(id=newer_task.id).update(created_at=base_time + timedelta(days=1))
 
-        response = self.client.get("/api/tasks/", {"ordering": "-created_at", "project": self.project.slug})
+        response = self.client.get(
+            "/api/tasks/",
+            {"ordering": "-created_at", "project": self.project.slug},
+        )
 
         self.assertEqual(response.status_code, 200)
         returned_slugs = [item["slug"] for item in response.data["results"]]
@@ -326,3 +339,177 @@ class ApiPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("unexpected_field", response.data)
+
+    def test_admin_can_create_workspace_invitation_via_api(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/invitations/",
+            {"email": "new-user@example.com", "role": MembershipRole.MEMBER},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["email"], "new-user@example.com")
+        self.assertEqual(response.data["workspace"], self.workspace.slug)
+
+    def test_member_cannot_create_workspace_invitation_via_api(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/invitations/",
+            {"email": "new-user@example.com", "role": MembershipRole.MEMBER},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_invitation_accept_api_rejects_mismatched_email(self):
+        invited_user = User.objects.create_user(
+            username="wrong-email-user",
+            email="wrong-email@example.com",
+            password="secret123",
+        )
+        invitation = create_invitation(
+            workspace=self.workspace,
+            email="different@example.com",
+            role=MembershipRole.MEMBER,
+            invited_by=self.owner,
+        )
+        self.client.force_authenticate(invited_user)
+
+        response = self.client.post(
+            f"/api/invitations/{invitation.token}/accept/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "This invitation is intended for a different email address.",
+        )
+
+    def test_invitation_accept_api_creates_membership(self):
+        invited_user = User.objects.create_user(
+            username="api-invitee",
+            email="api-invitee@example.com",
+            password="secret123",
+        )
+        invitation = create_invitation(
+            workspace=self.workspace,
+            email=invited_user.email,
+            role=MembershipRole.ADMIN,
+            invited_by=self.owner,
+        )
+        self.client.force_authenticate(invited_user)
+
+        response = self.client.post(
+            f"/api/invitations/{invitation.token}/accept/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["workspace"], self.workspace.slug)
+        self.assertEqual(response.data["role"], MembershipRole.ADMIN)
+        self.assertTrue(
+            Membership.objects.filter(
+                workspace=self.workspace,
+                user=invited_user,
+                role=MembershipRole.ADMIN,
+            ).exists()
+        )
+
+    def test_member_cannot_archive_project_via_api(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/archive/",
+            {},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_archive_and_restore_project_via_api(self):
+        self.client.force_authenticate(self.admin)
+
+        archive_response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/archive/",
+            {},
+            format="json",
+        )
+        self.assertEqual(archive_response.status_code, 200)
+        self.assertTrue(archive_response.data["is_archived"])
+
+        unarchive_response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/unarchive/",
+            {},
+            format="json",
+        )
+        self.assertEqual(unarchive_response.status_code, 200)
+        self.assertFalse(unarchive_response.data["is_archived"])
+
+    def test_archived_project_rejects_task_create_via_api(self):
+        archive_project(project=self.project, actor=self.owner)
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            "/api/tasks/",
+            {
+                "title": "Blocked task",
+                "description": "",
+                "priority": "medium",
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "Tasks cannot be changed in archived projects.",
+        )
+
+    def test_archived_project_rejects_task_patch_via_api(self):
+        archive_project(project=self.project, actor=self.owner)
+        self.client.force_authenticate(self.member)
+
+        response = self.client.patch(
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/tasks/{self.task.slug}/",
+            {"description": "Blocked update"},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_archived_project_rejects_comment_create_via_api(self):
+        archive_project(project=self.project, actor=self.owner)
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            "/api/comments/",
+            {
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task.slug,
+                "raw_text": "Blocked comment",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "Comments cannot be changed in archived projects.",
+        )
+
+    def test_archived_project_rejects_comment_delete_via_api(self):
+        archive_project(project=self.project, actor=self.owner)
+        self.client.force_authenticate(self.member)
+
+        response = self.client.delete(f"/api/comments/{self.comment.id}/")
+
+        self.assertEqual(response.status_code, 403)

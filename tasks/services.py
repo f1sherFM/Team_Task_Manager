@@ -2,11 +2,15 @@ from django.db import transaction
 
 from activity.services import log_activity
 from core.exceptions import DomainError
-from core.permissions import can_assign_task, can_change_task_status, can_create_task, can_view_task
+from core.permissions import (
+    can_assign_task,
+    can_change_task_status,
+    can_create_task,
+    can_update_task,
+)
 from core.slugs import create_with_unique_slug
-from tasks.models import Task
 from projects.models import Project
-
+from tasks.models import Task
 
 UNSET = object()
 
@@ -22,6 +26,9 @@ def create_task(
     assignee,
     created_by,
 ) -> Task:
+    if project.is_archived:
+        raise DomainError("Tasks cannot be changed in archived projects.")
+
     if not can_create_task(project=project, user=created_by):
         raise DomainError("Task creation requires workspace membership.")
 
@@ -58,6 +65,9 @@ def create_task(
 
 @transaction.atomic
 def assign_task(*, task: Task, assignee, actor) -> Task:
+    if task.project.is_archived:
+        raise DomainError("Tasks cannot be changed in archived projects.")
+
     if not can_assign_task(task=task, user=actor):
         raise DomainError("Only workspace admins can assign tasks.")
 
@@ -83,6 +93,9 @@ def assign_task(*, task: Task, assignee, actor) -> Task:
 
 @transaction.atomic
 def change_task_status(*, task: Task, status: str, actor) -> Task:
+    if task.project.is_archived:
+        raise DomainError("Tasks cannot be changed in archived projects.")
+
     if not can_change_task_status(task=task, user=actor):
         raise DomainError("Status change requires admin access or assignee role.")
 
@@ -137,8 +150,11 @@ def update_task_details(
     priority=UNSET,
     due_date=UNSET,
 ) -> Task:
-    if not can_view_task(task=task, user=actor):
-        raise DomainError("Task update requires workspace membership.")
+    if task.project.is_archived:
+        raise DomainError("Tasks cannot be changed in archived projects.")
+
+    if not can_update_task(task=task, user=actor):
+        raise DomainError("Task updates are not allowed for archived projects.")
 
     update_fields = []
     for field_name, value in (

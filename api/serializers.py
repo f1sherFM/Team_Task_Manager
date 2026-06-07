@@ -1,20 +1,19 @@
+from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
 from activity.models import ActivityLog
 from comments.models import Comment
 from comments.services import add_comment
 from core.exceptions import DomainError
-from django.contrib.auth import get_user_model
 from projects.models import Project
 from projects.selectors import get_workspace_project_by_slug
-from projects.services import create_project
+from projects.services import archive_project, create_project, unarchive_project
 from tasks.models import Task
 from tasks.selectors import get_project_task_by_slug
 from tasks.services import UNSET, create_task, update_task
-from workspaces.models import Workspace
-from workspaces.selectors import get_user_workspace_by_slug
-from workspaces.services import create_workspace
-
+from workspaces.models import Invitation, Workspace
+from workspaces.selectors import get_invitation_by_token, get_user_workspace_by_slug
+from workspaces.services import accept_invitation, create_invitation, create_workspace
 
 User = get_user_model()
 
@@ -50,7 +49,14 @@ class ProjectSerializer(serializers.ModelSerializer):
             "updated_at",
             "is_archived",
         )
-        read_only_fields = ("slug", "workspace", "created_by", "created_at", "updated_at", "is_archived")
+        read_only_fields = (
+            "slug",
+            "workspace",
+            "created_by",
+            "created_at",
+            "updated_at",
+            "is_archived",
+        )
 
     def create(self, validated_data):
         workspace_slug = validated_data.pop("workspace_slug")
@@ -129,7 +135,10 @@ class TaskSerializer(serializers.ModelSerializer):
                 project=project,
                 created_by=request.user,
                 assignee=assignee,
-                **validated_data,
+                title=validated_data["title"],
+                description=validated_data.get("description", ""),
+                priority=validated_data["priority"],
+                due_date=validated_data.get("due_date"),
             )
         except (Project.DoesNotExist, DomainError) as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc
@@ -205,4 +214,102 @@ class ActivityLogSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ActivityLog
-        fields = ("id", "workspace", "actor", "action", "target_type", "target_id", "metadata", "created_at")
+        fields = (
+            "id",
+            "workspace",
+            "actor",
+            "action",
+            "target_type",
+            "target_id",
+            "metadata",
+            "created_at",
+        )
+
+
+class InvitationSerializer(serializers.ModelSerializer):
+    invited_by = serializers.CharField(source="invited_by.username", read_only=True)
+    workspace = serializers.CharField(source="workspace.slug", read_only=True)
+
+    class Meta:
+        model = Invitation
+        fields = (
+            "email",
+            "role",
+            "token",
+            "workspace",
+            "invited_by",
+            "created_at",
+            "expires_at",
+            "accepted_at",
+        )
+        read_only_fields = (
+            "token",
+            "workspace",
+            "invited_by",
+            "created_at",
+            "expires_at",
+            "accepted_at",
+        )
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        workspace = self.context["workspace"]
+        try:
+            return create_invitation(
+                workspace=workspace,
+                email=validated_data["email"],
+                role=validated_data["role"],
+                invited_by=request.user,
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+
+class InvitationAcceptSerializer(serializers.Serializer):
+    token = serializers.UUIDField(read_only=True)
+    workspace = serializers.CharField(read_only=True)
+    role = serializers.CharField(read_only=True)
+    accepted_at = serializers.DateTimeField(read_only=True)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        token = self.context["token"]
+        try:
+            invitation = get_invitation_by_token(token=token)
+        except Invitation.DoesNotExist as exc:
+            raise serializers.ValidationError({"detail": "Invitation not found."}) from exc
+
+        try:
+            accept_invitation(invitation=invitation, user=request.user)
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+        invitation.refresh_from_db()
+        return invitation
+
+    def to_representation(self, instance):
+        return {
+            "token": str(instance.token),
+            "workspace": instance.workspace.slug,
+            "role": instance.role,
+            "accepted_at": instance.accepted_at,
+        }
+
+
+class ProjectArchiveSerializer(serializers.Serializer):
+    slug = serializers.CharField(read_only=True)
+    is_archived = serializers.BooleanField(read_only=True)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        project = self.context["project"]
+        action = self.context["action"]
+        if action == "archive":
+            return archive_project(project=project, actor=request.user)
+        return unarchive_project(project=project, actor=request.user)
+
+    def to_representation(self, instance):
+        return {
+            "slug": instance.slug,
+            "is_archived": instance.is_archived,
+        }

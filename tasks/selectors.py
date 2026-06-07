@@ -1,9 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.db.models import QuerySet
 
-from tasks.models import Task
 from projects.models import Project
-
+from tasks.models import Task
 
 User = get_user_model()
 
@@ -38,4 +37,8 @@ def get_project_task_by_slug(
 
 
 def get_project_task_candidates(*, project: Project) -> QuerySet[User]:
-    return User.objects.filter(workspace_memberships__workspace=project.workspace).order_by("username").distinct()
+    return (
+        User.objects.filter(workspace_memberships__workspace=project.workspace)
+        .order_by("username")
+        .distinct()
+    )

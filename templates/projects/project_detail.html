@@ -11,7 +11,27 @@
                     <p class="text-uppercase small fw-semibold text-primary mb-2">Project</p>
                     <h1 class="mb-3">{{ project.name }}</h1>
                     <p class="text-body-secondary mb-4">{{ project.description|default:"No description." }}</p>
-                    <a class="btn btn-primary" href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">View tasks</a>
+                    {% if project.is_archived %}
+                        <div class="alert alert-warning border shadow-sm mb-4">
+                            This project is archived. Existing work stays visible, but task and comment changes are disabled.
+                        </div>
+                    {% endif %}
+                    <div class="d-flex flex-wrap gap-2">
+                        <a class="btn btn-primary" href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">View tasks</a>
+                        {% if can_archive_project %}
+                            {% if project.is_archived %}
+                                <form action="{% url 'project-unarchive' workspace_slug=project.workspace.slug project_slug=project.slug %}" method="post" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-success">Restore project</button>
+                                </form>
+                            {% else %}
+                                <form action="{% url 'project-archive' workspace_slug=project.workspace.slug project_slug=project.slug %}" method="post" class="m-0">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-outline-secondary">Archive project</button>
+                                </form>
+                            {% endif %}
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>

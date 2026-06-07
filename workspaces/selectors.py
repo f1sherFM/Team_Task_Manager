@@ -1,6 +1,6 @@
 from django.db.models import QuerySet
 
-from workspaces.models import Membership, Workspace
+from workspaces.models import Invitation, Membership, Workspace
 
 
 def get_user_workspaces(user) -> QuerySet[Workspace]:
@@ -15,9 +15,21 @@ def get_workspace_members(workspace: Workspace) -> QuerySet[Membership]:
     return Membership.objects.filter(workspace=workspace).select_related("user", "workspace")
 
 
+def get_workspace_invitations(workspace: Workspace) -> QuerySet[Invitation]:
+    return (
+        Invitation.objects.filter(workspace=workspace)
+        .select_related("workspace", "invited_by")
+        .order_by("-created_at")
+    )
+
+
 def get_workspace_by_slug(slug: str) -> Workspace:
     return Workspace.objects.select_related("owner").get(slug=slug)
 
 
 def get_user_workspace_by_slug(*, slug: str, user) -> Workspace:
     return get_user_workspaces(user).get(slug=slug)
+
+
+def get_invitation_by_token(*, token) -> Invitation:
+    return Invitation.objects.select_related("workspace", "invited_by").get(token=token)

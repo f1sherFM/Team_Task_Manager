@@ -4,14 +4,18 @@ from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic import FormView, TemplateView
 
-from workspaces.models import Workspace
-from workspaces.forms import WorkspaceCreateForm
+from core.exceptions import DomainError
+from core.permissions import can_manage_invitations
+from workspaces.forms import InvitationCreateForm, WorkspaceCreateForm
+from workspaces.models import Invitation, Workspace
 from workspaces.selectors import (
-    get_user_workspaces,
-    get_workspace_members,
+    get_invitation_by_token,
     get_user_workspace_by_slug,
+    get_user_workspaces,
+    get_workspace_invitations,
+    get_workspace_members,
 )
-from workspaces.services import create_workspace
+from workspaces.services import accept_invitation, create_invitation, create_workspace
 
 
 class WorkspaceAccessMixin(LoginRequiredMixin):
@@ -59,11 +63,69 @@ class WorkspaceDetailView(WorkspaceAccessMixin, TemplateView):
         return context
 
 
-class WorkspaceMembersView(WorkspaceAccessMixin, TemplateView):
+class WorkspaceMembersView(WorkspaceAccessMixin, FormView):
+    form_class = InvitationCreateForm
     template_name = "workspaces/workspace_members.html"
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
         context["workspace"] = self.workspace
         context["memberships"] = get_workspace_members(self.workspace)
+        context["invitations"] = get_workspace_invitations(self.workspace)
+        context["can_manage_invitations"] = can_manage_invitations(
+            workspace=self.workspace,
+            user=self.request.user,
+        )
         return context
+
+    def form_valid(self, form):
+        if not can_manage_invitations(workspace=self.workspace, user=self.request.user):
+            form.add_error(None, "Invitation creation requires admin access.")
+            return self.form_invalid(form)
+
+        try:
+            create_invitation(
+                workspace=self.workspace,
+                email=form.cleaned_data["email"],
+                role=form.cleaned_data["role"],
+                invited_by=self.request.user,
+            )
+        except DomainError as exc:
+            form.add_error(None, str(exc))
+            return self.form_invalid(form)
+
+        messages.success(self.request, "Invitation created.")
+        return redirect("workspace-members", slug=self.workspace.slug)
+
+
+class InvitationAcceptView(LoginRequiredMixin, TemplateView):
+    template_name = "workspaces/invitation_accept.html"
+    invitation = None
+
+    def dispatch(self, request, *args, **kwargs):
+        try:
+            self.invitation = get_invitation_by_token(token=kwargs["token"])
+        except Invitation.DoesNotExist as exc:
+            raise Http404("Invitation not found.") from exc
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_context_data(self, **kwargs):
+        context = super().get_context_data(**kwargs)
+        context["invitation"] = self.invitation
+        return context
+
+    def post(self, request, *args, **kwargs):
+        try:
+            accept_invitation(invitation=self.invitation, user=request.user)
+        except DomainError as exc:
+            messages.error(request, str(exc))
+            return redirect("invitation-accept", token=self.invitation.token)
+
+        messages.success(
+            request,
+            (
+                f"You joined {self.invitation.workspace.name} as "
+                f"{self.invitation.get_role_display().lower()}."
+            ),
+        )
+        return redirect("workspace-detail", slug=self.invitation.workspace.slug)

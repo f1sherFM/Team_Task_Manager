@@ -8,7 +8,7 @@
         <div class="card border-0 shadow-sm">
             <div class="card-body p-4 p-lg-5">
                 <h1 class="h2 mb-3">Edit {{ task.title }}</h1>
-                <p class="text-body-secondary mb-4">Update task assignment, status, priority, and scheduling details.</p>
+                <p class="text-body-secondary mb-4">Update task details, assignment, status, priority, and scheduling.</p>
                 <form method="post" class="ttm-form">
                     {% csrf_token %}
                     {{ form.as_p }}

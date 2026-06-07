@@ -2,7 +2,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.exceptions import DomainError
-from core.permissions import has_membership_role
+from core.permissions import can_manage_invitations, has_membership_role
 from core.slugs import create_with_unique_slug
 from workspaces.models import Invitation, Membership, MembershipRole, Workspace
 
@@ -20,18 +20,30 @@ def create_workspace(*, owner, name: str) -> Workspace:
 
 @transaction.atomic
 def create_invitation(*, workspace: Workspace, email: str, role: str, invited_by) -> Invitation:
+    if not can_manage_invitations(workspace=workspace, user=invited_by):
+        raise DomainError("Invitation creation requires admin access.")
+
     if role == MembershipRole.OWNER:
         raise DomainError("Invitations cannot grant the owner role.")
 
-    if Membership.objects.filter(workspace=workspace, user__email__iexact=email).exists():
+    normalized_email = email.strip().lower()
+
+    if Membership.objects.filter(
+        workspace=workspace,
+        user__email__iexact=normalized_email,
+    ).exists():
         raise DomainError("User is already a member of this workspace.")
 
-    if Invitation.objects.filter(workspace=workspace, email__iexact=email, accepted_at__isnull=True).exists():
+    if Invitation.objects.filter(
+        workspace=workspace,
+        email__iexact=normalized_email,
+        accepted_at__isnull=True,
+    ).exists():
         raise DomainError("An active invitation already exists for this email.")
 
     return Invitation.objects.create(
         workspace=workspace,
-        email=email,
+        email=normalized_email,
         role=role,
         invited_by=invited_by,
     )
@@ -48,6 +60,13 @@ def accept_invitation(*, invitation: Invitation, user) -> Membership:
     if Membership.objects.filter(workspace=invitation.workspace, user=user).exists():
         raise DomainError("User is already a member of this workspace.")
 
+    user_email = getattr(user, "email", "").strip().lower()
+    if not user_email:
+        raise DomainError("A verified email is required to accept this invitation.")
+
+    if invitation.email.strip().lower() != user_email:
+        raise DomainError("This invitation is intended for a different email address.")
+
     membership = Membership.objects.create(
         workspace=invitation.workspace,
         user=user,
@@ -62,6 +81,9 @@ def accept_invitation(*, invitation: Invitation, user) -> Membership:
 def change_membership_role(*, membership: Membership, role: str) -> Membership:
     if membership.role == MembershipRole.OWNER:
         raise DomainError("Owner membership cannot be changed.")
+
+    if role == MembershipRole.OWNER:
+        raise DomainError("Owner role can only be assigned during workspace creation.")
 
     membership.role = role
     membership.save(update_fields=["role"])

@@ -1,7 +1,15 @@
 from activity.models import ActivityLog
 
 
-def log_activity(*, workspace, actor, action: str, target_type: str, target_id, metadata: dict | None = None) -> ActivityLog:
+def log_activity(
+    *,
+    workspace,
+    actor,
+    action: str,
+    target_type: str,
+    target_id,
+    metadata: dict | None = None,
+) -> ActivityLog:
     return ActivityLog.objects.create(
         workspace=workspace,
         actor=actor,

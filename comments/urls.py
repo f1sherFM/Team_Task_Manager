@@ -2,7 +2,6 @@ from django.urls import path
 
 from comments.views import CommentCreateView, CommentDeleteView
 
-
 urlpatterns = [
     path(
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/comments/add/",

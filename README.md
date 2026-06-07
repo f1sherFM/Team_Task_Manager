@@ -90,7 +90,7 @@ Important files:
 - `core/permissions.py`: shared permission checks
 - `core/slugs.py`: immutable slug generation helpers
 - `workspaces/services.py`: workspace ownership and invitation workflows
-- `projects/services.py`: project creation workflow
+- `projects/services.py`: project creation and archive workflows
 - `tasks/services.py`: task creation, assignment, status change workflows
 - `comments/services.py`: comment create and soft delete workflows
 - `activity/services.py`: append-only activity writer
@@ -113,6 +113,7 @@ Important files:
 - Slugs are immutable after creation and enforced by scoped unique constraints at the database layer.
 - `ActivityLog` is append-only and written only from services to keep audit history consistent without introducing an event bus.
 - Comments use soft delete semantics in the UI and API while preserving domain-level permission checks around deletion.
+- Archived projects are read-only for task and comment mutations while remaining visible to workspace members.
 
 ## Quick Start
 
@@ -213,7 +214,7 @@ For external Render Postgres connections, set `DB_SSL_REQUIRE=True` if your URL 
 
 ## Render Deployment
 
-The repository includes [render.yaml](C:/Users/kiril/OneDrive/Рабочий%20стол/TTM/render.yaml) and [build.sh](C:/Users/kiril/OneDrive/Рабочий%20стол/TTM/build.sh) for Render deployment.
+The repository includes `render.yaml` and `build.sh` for Render deployment.
 
 Deployment behavior on Render:
 
@@ -254,8 +255,11 @@ Manual Render service values:
 - `/workspaces/<slug>/`
 - `/workspaces/<slug>/members/`
 - `/workspaces/<slug>/activity/`
+- `/invitations/<token>/accept/`
 - `/workspaces/<slug>/projects/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/`
+- `/workspaces/<workspace_slug>/projects/<project_slug>/archive/`
+- `/workspaces/<workspace_slug>/projects/<project_slug>/unarchive/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/edit/`
@@ -272,7 +276,11 @@ Resources:
 - `GET, POST /api/workspaces/`
 - `GET /api/workspaces/<slug>/`
 - `GET, POST /api/projects/`
+- `GET, POST /api/workspaces/<slug>/invitations/`
+- `POST /api/invitations/<token>/accept/`
 - `GET /api/workspaces/<workspace_slug>/projects/<project_slug>/`
+- `POST /api/workspaces/<workspace_slug>/projects/<project_slug>/archive/`
+- `POST /api/workspaces/<workspace_slug>/projects/<project_slug>/unarchive/`
 - `GET, POST /api/tasks/`
 - `GET, PATCH /api/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
 - `GET, POST /api/comments/`

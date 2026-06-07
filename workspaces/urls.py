@@ -8,7 +8,6 @@ from workspaces.views import (
     WorkspaceMembersView,
 )
 
-
 urlpatterns = [
     path("", WorkspaceListView.as_view(), name="workspace-list"),
     path("create/", WorkspaceCreateView.as_view(), name="workspace-create"),

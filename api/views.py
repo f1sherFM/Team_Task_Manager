@@ -4,11 +4,22 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+
 from activity.selectors import get_user_activity, get_workspace_activity
-from api.permissions import CommentPermission, ProjectPermission, TaskPermission, WorkspacePermission
+from api.permissions import (
+    CommentPermission,
+    ProjectArchivePermission,
+    ProjectPermission,
+    TaskPermission,
+    WorkspaceInvitationPermission,
+    WorkspacePermission,
+)
 from api.serializers import (
     ActivityLogSerializer,
     CommentSerializer,
+    InvitationAcceptSerializer,
+    InvitationSerializer,
+    ProjectArchiveSerializer,
     ProjectSerializer,
     TaskSerializer,
     WorkspaceSerializer,
@@ -20,8 +31,13 @@ from projects.models import Project
 from projects.selectors import get_workspace_project_by_slug
 from tasks.models import Task
 from tasks.selectors import get_project_task_by_slug
-from workspaces.models import Workspace
-from workspaces.selectors import get_user_workspace_by_slug, get_user_workspaces
+from workspaces.models import Invitation, Workspace
+from workspaces.selectors import (
+    get_invitation_by_token,
+    get_user_workspace_by_slug,
+    get_user_workspaces,
+    get_workspace_invitations,
+)
 
 
 class WorkspaceViewSet(
@@ -138,6 +154,47 @@ class WorkspaceActivityAPIView(generics.ListAPIView):
         return get_workspace_activity(workspace)
 
 
+class WorkspaceInvitationListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = InvitationSerializer
+    permission_classes = [WorkspaceInvitationPermission]
+
+    def get_workspace(self):
+        try:
+            workspace = get_user_workspace_by_slug(
+                slug=self.kwargs["slug"],
+                user=self.request.user,
+            )
+        except Workspace.DoesNotExist as exc:
+            raise Http404("Workspace not found.") from exc
+        self.check_object_permissions(self.request, workspace)
+        return workspace
+
+    def get_queryset(self):
+        return get_workspace_invitations(self.get_workspace())
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["workspace"] = self.get_workspace()
+        return context
+
+
+class InvitationAcceptAPIView(generics.CreateAPIView):
+    serializer_class = InvitationAcceptSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["token"] = self.kwargs["token"]
+        return context
+
+    def create(self, request, *args, **kwargs):
+        try:
+            get_invitation_by_token(token=kwargs["token"])
+        except Invitation.DoesNotExist as exc:
+            raise Http404("Invitation not found.") from exc
+        return super().create(request, *args, **kwargs)
+
+
 class ProjectDetailAPIView(generics.RetrieveAPIView):
     serializer_class = ProjectSerializer
     permission_classes = [ProjectPermission]
@@ -153,6 +210,40 @@ class ProjectDetailAPIView(generics.RetrieveAPIView):
             raise Http404("Project not found.") from exc
         self.check_object_permissions(self.request, project)
         return project
+
+
+class ProjectArchiveAPIView(generics.CreateAPIView):
+    serializer_class = ProjectArchiveSerializer
+    permission_classes = [ProjectArchivePermission]
+    action = "archive"
+
+    def get_project(self):
+        try:
+            project = get_workspace_project_by_slug(
+                workspace_slug=self.kwargs["workspace_slug"],
+                project_slug=self.kwargs["project_slug"],
+                user=self.request.user,
+            )
+        except Project.DoesNotExist as exc:
+            raise Http404("Project not found.") from exc
+        self.check_object_permissions(self.request, project)
+        return project
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["project"] = self.get_project()
+        context["action"] = self.action
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data={})
+        serializer.is_valid(raise_exception=True)
+        project = serializer.save()
+        return Response(serializer.to_representation(project), status=status.HTTP_200_OK)
+
+
+class ProjectUnarchiveAPIView(ProjectArchiveAPIView):
+    action = "unarchive"
 
 
 class TaskDetailAPIView(generics.RetrieveUpdateAPIView):

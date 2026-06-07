@@ -2,7 +2,6 @@ from django.urls import path
 
 from tasks.views import ProjectTaskListView, TaskDetailView, TaskUpdateView
 
-
 urlpatterns = [
     path(
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/",

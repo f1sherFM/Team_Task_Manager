@@ -3,10 +3,16 @@ from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from core.views import HomeView
+from workspaces.views import InvitationAcceptView
 
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     path("accounts/", include("accounts.urls")),
+    path(
+        "invitations/<uuid:token>/accept/",
+        InvitationAcceptView.as_view(),
+        name="invitation-accept",
+    ),
     path("api/schema/", SpectacularAPIView.as_view(), name="api-schema"),
     path("api/docs/", SpectacularSwaggerView.as_view(url_name="api-schema"), name="api-docs"),
     path("api/", include("api.urls")),

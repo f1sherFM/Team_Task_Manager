@@ -5,14 +5,17 @@ from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from api.views import (
     ActivityViewSet,
     CommentViewSet,
+    InvitationAcceptAPIView,
+    ProjectArchiveAPIView,
     ProjectDetailAPIView,
+    ProjectUnarchiveAPIView,
     ProjectViewSet,
     TaskDetailAPIView,
     TaskViewSet,
     WorkspaceActivityAPIView,
+    WorkspaceInvitationListCreateAPIView,
     WorkspaceViewSet,
 )
-
 
 router = DefaultRouter()
 router.register("workspaces", WorkspaceViewSet, basename="api-workspace")
@@ -25,11 +28,35 @@ router.register("activity", ActivityViewSet, basename="api-activity")
 urlpatterns = [
     path("auth/token/", TokenObtainPairView.as_view(), name="token-obtain-pair"),
     path("auth/token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
-    path("workspaces/<slug:slug>/activity/", WorkspaceActivityAPIView.as_view(), name="api-workspace-activity"),
+    path(
+        "invitations/<uuid:token>/accept/",
+        InvitationAcceptAPIView.as_view(),
+        name="api-invitation-accept",
+    ),
+    path(
+        "workspaces/<slug:slug>/activity/",
+        WorkspaceActivityAPIView.as_view(),
+        name="api-workspace-activity",
+    ),
+    path(
+        "workspaces/<slug:slug>/invitations/",
+        WorkspaceInvitationListCreateAPIView.as_view(),
+        name="api-workspace-invitations",
+    ),
     path(
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/",
         ProjectDetailAPIView.as_view(),
         name="api-project-detail",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/archive/",
+        ProjectArchiveAPIView.as_view(),
+        name="api-project-archive",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/unarchive/",
+        ProjectUnarchiveAPIView.as_view(),
+        name="api-project-unarchive",
     ),
     path(
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/",

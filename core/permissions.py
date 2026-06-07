@@ -33,23 +33,45 @@ def can_create_project(*, workspace, user) -> bool:
     return can_manage_workspace(workspace=workspace, user=user)
 
 
+def can_manage_invitations(*, workspace, user) -> bool:
+    return can_manage_workspace(workspace=workspace, user=user)
+
+
 def can_view_project(*, project, user) -> bool:
     return can_view_workspace(workspace=project.workspace, user=user)
 
 
+def can_archive_project(*, project, user) -> bool:
+    return can_manage_workspace(workspace=project.workspace, user=user)
+
+
+def is_project_writable(project) -> bool:
+    return not project.is_archived
+
+
 def can_create_task(*, project, user) -> bool:
-    return can_view_project(project=project, user=user)
+    return can_view_project(project=project, user=user) and is_project_writable(project)
 
 
 def can_view_task(*, task, user) -> bool:
     return can_view_project(project=task.project, user=user)
 
 
+def can_update_task(*, task, user) -> bool:
+    return can_view_task(task=task, user=user) and is_project_writable(task.project)
+
+
 def can_assign_task(*, task, user) -> bool:
-    return can_manage_workspace(workspace=task.project.workspace, user=user)
+    return can_manage_workspace(
+        workspace=task.project.workspace,
+        user=user,
+    ) and is_project_writable(task.project)
 
 
 def can_change_task_status(*, task, user) -> bool:
+    if not is_project_writable(task.project):
+        return False
+
     if can_manage_workspace(workspace=task.project.workspace, user=user):
         return True
 
@@ -57,10 +79,13 @@ def can_change_task_status(*, task, user) -> bool:
 
 
 def can_create_comment(*, task, user) -> bool:
-    return can_view_task(task=task, user=user)
+    return can_view_task(task=task, user=user) and is_project_writable(task.project)
 
 
 def can_delete_comment(*, comment, user) -> bool:
+    if not is_project_writable(comment.task.project):
+        return False
+
     if can_manage_workspace(workspace=comment.task.project.workspace, user=user):
         return True
 

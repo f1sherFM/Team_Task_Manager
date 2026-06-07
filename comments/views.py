@@ -6,7 +6,7 @@ from django.views.generic import FormView, View
 
 from comments.forms import CommentForm
 from comments.models import Comment
-from comments.selectors import get_comment_by_id, get_task_comments
+from comments.selectors import get_comment_by_id
 from comments.services import add_comment, soft_delete_comment
 from core.exceptions import DomainError
 from tasks.models import Task

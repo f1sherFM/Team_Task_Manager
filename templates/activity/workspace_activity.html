@@ -27,6 +27,10 @@
                                     Task Status Changed
                                 {% elif entry.action == "comment_added" %}
                                     Comment Added
+                                {% elif entry.action == "project_archived" %}
+                                    Project Archived
+                                {% elif entry.action == "project_unarchived" %}
+                                    Project Restored
                                 {% else %}
                                     {{ entry.action }}
                                 {% endif %}

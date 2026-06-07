@@ -25,6 +25,10 @@ class TaskCreateForm(forms.Form):
 
 
 class TaskUpdateForm(forms.Form):
+    title = forms.CharField(max_length=255)
+    description = forms.CharField(widget=forms.Textarea, required=False)
+    priority = forms.ChoiceField(choices=TaskPriority.choices)
+    due_date = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
     status = forms.ChoiceField(choices=TaskStatus.choices)
     assignee = forms.ChoiceField(required=False)
 
@@ -34,6 +38,10 @@ class TaskUpdateForm(forms.Form):
         choices.extend((str(member.id), member.username) for member in members)
         self.fields["assignee"].choices = choices
         self._members = {str(member.id): member for member in members}
+        self.fields["title"].initial = task.title
+        self.fields["description"].initial = task.description
+        self.fields["priority"].initial = task.priority
+        self.fields["due_date"].initial = task.due_date
         self.fields["status"].initial = task.status
         self.fields["assignee"].initial = str(task.assignee_id) if task.assignee_id else ""
 

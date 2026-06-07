@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Accept Invitation | Team Task Manager{% endblock %}
+
+{% block content %}
+<section class="row justify-content-center py-3">
+    <div class="col-lg-7">
+        <div class="card border-0 shadow-sm">
+            <div class="card-body p-4 p-lg-5">
+                <h1 class="h2 mb-3">Accept invitation</h1>
+                <p class="text-body-secondary mb-4">
+                    Join <strong>{{ invitation.workspace.name }}</strong> as
+                    <strong>{{ invitation.get_role_display }}</strong>.
+                </p>
+                <dl class="row mb-4">
+                    <dt class="col-sm-4">Invited email</dt>
+                    <dd class="col-sm-8">{{ invitation.email }}</dd>
+                    <dt class="col-sm-4">Invited by</dt>
+                    <dd class="col-sm-8">{{ invitation.invited_by.username }}</dd>
+                    <dt class="col-sm-4">Expires</dt>
+                    <dd class="col-sm-8">{{ invitation.expires_at|date:"M j, Y H:i" }}</dd>
+                </dl>
+                <form method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-primary">Accept invitation</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

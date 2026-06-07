@@ -4,7 +4,6 @@ from django.dispatch import receiver
 
 from accounts.models import Profile
 
-
 User = get_user_model()
 
 

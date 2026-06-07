@@ -12,20 +12,19 @@ from core.permissions import (
     can_assign_task,
     can_change_task_status,
     can_create_task,
-    can_delete_comment,
     get_workspace_membership,
     has_membership_role,
 )
+from projects.models import Project
+from projects.selectors import get_workspace_project_by_slug
 from tasks.forms import TaskCreateForm, TaskUpdateForm
 from tasks.models import Task
 from tasks.selectors import (
-    get_project_task_candidates,
     get_project_task_by_slug,
+    get_project_task_candidates,
     get_project_tasks,
 )
-from tasks.services import assign_task, change_task_status, create_task
-from projects.models import Project
-from projects.selectors import get_workspace_project_by_slug
+from tasks.services import create_task, update_task
 
 
 class ProjectTaskAccessMixin(LoginRequiredMixin):
@@ -45,6 +44,7 @@ class ProjectTaskAccessMixin(LoginRequiredMixin):
 
 class TaskAccessMixin(LoginRequiredMixin):
     task = None
+    allow_archived = True
 
     def dispatch(self, request, *args, **kwargs):
         try:
@@ -56,6 +56,8 @@ class TaskAccessMixin(LoginRequiredMixin):
             )
         except Task.DoesNotExist as exc:
             raise Http404("Task not found.") from exc
+        if not self.allow_archived and self.task.project.is_archived:
+            raise PermissionDenied("Archived projects are read-only.")
         return super().dispatch(request, *args, **kwargs)
 
 
@@ -73,6 +75,7 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
         context["project"] = self.project
         context["tasks"] = get_project_tasks(project=self.project)
         context["can_create_task"] = can_create_task(project=self.project, user=self.request.user)
+        context["is_project_archived"] = self.project.is_archived
         return context
 
     def form_valid(self, form):
@@ -115,16 +118,20 @@ class TaskDetailView(TaskAccessMixin, TemplateView):
         is_workspace_admin = has_membership_role(membership, "owner", "admin")
         context["task"] = self.task
         context["comments"] = comments
-        context["comment_form"] = CommentForm()
+        context["comment_form"] = None if self.task.project.is_archived else CommentForm()
+        context["can_edit_task"] = not self.task.project.is_archived
+        context["is_project_archived"] = self.task.project.is_archived
         context["deletable_comment_ids"] = {
             comment.id
             for comment in comments
-            if is_workspace_admin or comment.author_id == self.request.user.id
+            if not self.task.project.is_archived
+            and (is_workspace_admin or comment.author_id == self.request.user.id)
         }
         return context
 
 
 class TaskUpdateView(TaskAccessMixin, FormView):
+    allow_archived = False
     form_class = TaskUpdateForm
     template_name = "tasks/task_form.html"
 
@@ -139,20 +146,20 @@ class TaskUpdateView(TaskAccessMixin, FormView):
             if form.cleaned_data["assignee"] != self.task.assignee:
                 if not can_assign_task(task=self.task, user=self.request.user):
                     raise PermissionDenied("Task assignment requires admin access.")
-                self.task = assign_task(
-                    task=self.task,
-                    assignee=form.cleaned_data["assignee"],
-                    actor=self.request.user,
-                )
 
             if form.cleaned_data["status"] != self.task.status:
                 if not can_change_task_status(task=self.task, user=self.request.user):
                     raise PermissionDenied("Status change requires admin access or assignee role.")
-                self.task = change_task_status(
-                    task=self.task,
-                    status=form.cleaned_data["status"],
-                    actor=self.request.user,
-                )
+            self.task = update_task(
+                task=self.task,
+                actor=self.request.user,
+                title=form.cleaned_data["title"],
+                description=form.cleaned_data["description"],
+                priority=form.cleaned_data["priority"],
+                due_date=form.cleaned_data["due_date"],
+                assignee=form.cleaned_data["assignee"],
+                status=form.cleaned_data["status"],
+            )
         except DomainError as exc:
             form.add_error(None, str(exc))
             return self.form_invalid(form)

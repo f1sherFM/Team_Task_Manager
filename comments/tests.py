@@ -1,13 +1,12 @@
-from django.test import TestCase
 from django.contrib.auth import get_user_model
+from django.test import TestCase
 
-from core.exceptions import DomainError
 from comments.services import add_comment, soft_delete_comment
-from projects.services import create_project
+from core.exceptions import DomainError
+from projects.services import archive_project, create_project
 from tasks.services import create_task
 from workspaces.models import Membership, MembershipRole
 from workspaces.services import create_workspace
-
 
 User = get_user_model()
 
@@ -18,8 +17,16 @@ class CommentServiceTests(TestCase):
         self.author = User.objects.create_user(username="author", password="secret123")
         self.member = User.objects.create_user(username="member", password="secret123")
         self.workspace = create_workspace(owner=self.owner, name="Engineering")
-        Membership.objects.create(workspace=self.workspace, user=self.author, role=MembershipRole.MEMBER)
-        Membership.objects.create(workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER)
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.author,
+            role=MembershipRole.MEMBER,
+        )
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.member,
+            role=MembershipRole.MEMBER,
+        )
         self.project = create_project(
             workspace=self.workspace,
             name="Platform",
@@ -49,3 +56,16 @@ class CommentServiceTests(TestCase):
 
         with self.assertRaises(DomainError):
             soft_delete_comment(comment=comment, actor=self.member)
+
+    def test_cannot_add_comment_in_archived_project(self):
+        archive_project(project=self.project, actor=self.owner)
+
+        with self.assertRaises(DomainError):
+            add_comment(task=self.task, author=self.author, text="Blocked note")
+
+    def test_cannot_delete_comment_in_archived_project(self):
+        comment = add_comment(task=self.task, author=self.author, text="Initial note")
+        archive_project(project=self.project, actor=self.owner)
+
+        with self.assertRaises(DomainError):
+            soft_delete_comment(comment=comment, actor=self.author)
