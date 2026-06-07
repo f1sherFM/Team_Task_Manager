@@ -15,6 +15,7 @@ for notable implementation milestones.
 - Invitation acceptance template at `templates/workspaces/invitation_accept.html`.
 - `/healthz/` and `/readyz/` operational endpoints for liveness and readiness checks.
 - GitHub Actions CI workflow for linting, Django checks, migration drift checks, and tests.
+- Local agent automation commands for listing workspaces and projects and creating projects or tasks through Django services.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

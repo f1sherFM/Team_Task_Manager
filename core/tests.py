@@ -1,8 +1,18 @@
+import json
+from io import StringIO
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
+from django.core.management import call_command
+from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 
+from core.agent import create_project_for_agent, create_task_for_agent, execute_agent_request
 from core.health import get_readiness_status
+from projects.services import create_project
+from tasks.models import TaskPriority
+from workspaces.models import Membership, MembershipRole
+from workspaces.services import create_workspace
 
 
 class HealthEndpointTests(TestCase):
@@ -44,3 +54,112 @@ class ReadinessStatusTests(SimpleTestCase):
             payload["checks"]["migrations"]["pending_migrations"],
             ["tasks.0003_example"],
         )
+
+
+class AgentAutomationTests(TestCase):
+    def setUp(self):
+        self.stdout = StringIO()
+        self.User = get_user_model()
+        self.owner = self.User.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="secret123",
+        )
+        self.member = self.User.objects.create_user(
+            username="member",
+            email="member@example.com",
+            password="secret123",
+        )
+        self.workspace = create_workspace(owner=self.owner, name="Engineering")
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.member,
+            role=MembershipRole.MEMBER,
+        )
+        self.project = create_project(
+            workspace=self.workspace,
+            name="Backend Platform",
+            description="Primary backend project",
+            created_by=self.owner,
+        )
+
+    def test_create_project_for_agent_uses_domain_services(self):
+        project = create_project_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            name="API Expansion",
+            description="Add new internal tooling",
+        )
+
+        self.assertEqual(project.workspace, self.workspace)
+        self.assertEqual(project.created_by, self.owner)
+
+    def test_create_task_for_agent_supports_name_resolution(self):
+        task = create_task_for_agent(
+            actor_ref="owner@example.com",
+            workspace_ref="Engineering",
+            project_ref="Backend Platform",
+            title="Ship agent CLI",
+            description="Create commands for Codex",
+            priority=TaskPriority.HIGH,
+            assignee_ref="member",
+            due_date="2026-06-08",
+        )
+
+        self.assertEqual(task.project, self.project)
+        self.assertEqual(task.assignee, self.member)
+        self.assertEqual(task.priority, TaskPriority.HIGH)
+        self.assertEqual(task.due_date.isoformat(), "2026-06-08")
+
+    def test_execute_agent_request_supports_structured_task_request(self):
+        payload = execute_agent_request(
+            actor_ref="owner",
+            request_text=(
+                "action: create_task\n"
+                "workspace: Engineering\n"
+                "project: Backend Platform\n"
+                "title: Add audit export\n"
+                "description: Build an export command for activity logs\n"
+                "priority: medium\n"
+                "assignee: member\n"
+            ),
+        )
+
+        self.assertEqual(payload["action"], "create_task")
+        self.assertEqual(payload["workspace"], self.workspace.slug)
+        self.assertEqual(payload["project"], self.project.slug)
+
+    def test_agent_list_workspaces_command_outputs_json(self):
+        call_command(
+            "agent_list_workspaces",
+            actor="owner",
+            stdout=self.stdout,
+        )
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload[0]["slug"], self.workspace.slug)
+
+    def test_agent_create_task_command_creates_task(self):
+        call_command(
+            "agent_create_task",
+            actor="owner",
+            workspace=self.workspace.slug,
+            project=self.project.slug,
+            title="Document CLI flow",
+            description="Write down the agent workflow",
+            priority="medium",
+            stdout=self.stdout,
+        )
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload["project"], self.project.slug)
+        self.assertEqual(payload["title"], "Document CLI flow")
+
+    def test_agent_capture_request_command_rejects_unsupported_request(self):
+        with self.assertRaises(CommandError):
+            call_command(
+                "agent_capture_request",
+                actor="owner",
+                request="please do something vague",
+                stdout=self.stdout,
+            )

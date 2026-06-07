@@ -327,6 +327,40 @@ curl -X PATCH http://127.0.0.1:8000/api/workspaces/engineering/projects/backend/
   -d "{\"description\":\"Updated from API\"}"
 ```
 
+## Agent Automation
+
+TTM also exposes a local command-driven automation layer for Codex-style agents.
+These commands call Django domain services directly, so they reuse the same
+permissions, slug rules, and activity logging as the HTML and API layers.
+
+Useful commands:
+
+```bash
+python manage.py agent_list_workspaces --actor owner
+python manage.py agent_list_projects --actor owner --workspace engineering
+python manage.py agent_create_project --actor owner --workspace engineering --name "Ops Console"
+python manage.py agent_create_task --actor owner --workspace engineering --project backend --title "Add audit export"
+```
+
+There is also a higher-level capture command for structured requests:
+
+```bash
+python manage.py agent_capture_request --actor owner --request "action: create_task
+workspace: Engineering
+project: Backend
+title: Add audit export
+description: Build a command for exporting workspace activity
+priority: high
+assignee: alice"
+```
+
+Recommended usage for future Codex chats:
+
+- resolve the actor once with `--actor`
+- list accessible workspaces and projects through the agent commands
+- create the project or task through management commands instead of calling REST endpoints
+- prefer the structured `action/workspace/project/title/...` format when using `agent_capture_request`
+
 ## Testing
 
 Run the service and API tests with:
