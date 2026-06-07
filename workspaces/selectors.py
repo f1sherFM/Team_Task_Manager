@@ -33,3 +33,17 @@ def get_user_workspace_by_slug(*, slug: str, user) -> Workspace:
 
 def get_invitation_by_token(*, token) -> Invitation:
     return Invitation.objects.select_related("workspace", "invited_by").get(token=token)
+
+
+def get_workspace_membership_by_id(*, workspace: Workspace, membership_id: int) -> Membership:
+    return Membership.objects.select_related("user", "workspace").get(
+        workspace=workspace,
+        id=membership_id,
+    )
+
+
+def get_workspace_invitation_by_id(*, workspace: Workspace, invitation_id: int) -> Invitation:
+    return Invitation.objects.select_related("workspace", "invited_by").get(
+        workspace=workspace,
+        id=invitation_id,
+    )

@@ -25,6 +25,7 @@
                                 <th>User</th>
                                 <th>Role</th>
                                 <th>Joined</th>
+                                <th class="text-end">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -41,10 +42,32 @@
                                         {% endif %}
                                     </td>
                                     <td class="text-body-secondary">{{ membership.joined_at|date:"M j, Y" }}</td>
+                                    <td class="text-end">
+                                        {% if membership.id in manageable_membership_ids %}
+                                            <div class="d-flex flex-wrap justify-content-end gap-2">
+                                                <form method="post" action="{% url 'workspace-membership-role-update' slug=workspace.slug membership_id=membership.id %}" class="d-flex gap-2">
+                                                    {% csrf_token %}
+                                                    <select name="role" class="form-select form-select-sm">
+                                                        <option value="admin" {% if membership.role == "admin" %}selected{% endif %}>Admin</option>
+                                                        <option value="member" {% if membership.role == "member" %}selected{% endif %}>Member</option>
+                                                    </select>
+                                                    <button type="submit" class="btn btn-sm btn-outline-primary">Update</button>
+                                                </form>
+                                                <form method="post" action="{% url 'workspace-membership-remove' slug=workspace.slug membership_id=membership.id %}">
+                                                    {% csrf_token %}
+                                                    <button type="submit" class="btn btn-sm btn-outline-danger">Remove</button>
+                                                </form>
+                                            </div>
+                                        {% elif membership.role == "owner" %}
+                                            <span class="text-body-secondary small">Canonical owner</span>
+                                        {% else %}
+                                            <span class="text-body-secondary small">No actions</span>
+                                        {% endif %}
+                                    </td>
                                 </tr>
                             {% empty %}
                                 <tr>
-                                    <td colspan="3" class="text-center py-4 text-body-secondary">No members found.</td>
+                                    <td colspan="4" class="text-center py-4 text-body-secondary">No members found.</td>
                                 </tr>
                             {% endfor %}
                         </tbody>
@@ -78,6 +101,12 @@
                                             {% url 'invitation-accept' token=invitation.token %}
                                         </a>
                                     </div>
+                                    {% if can_manage_invitations %}
+                                        <form method="post" action="{% url 'workspace-invitation-revoke' slug=workspace.slug invitation_id=invitation.id %}" class="mt-3">
+                                            {% csrf_token %}
+                                            <button type="submit" class="btn btn-sm btn-outline-danger">Revoke invitation</button>
+                                        </form>
+                                    {% endif %}
                                 {% endif %}
                             </div>
                         {% empty %}
@@ -95,6 +124,26 @@
                             {% csrf_token %}
                             {{ form.as_p }}
                             <button type="submit" class="btn btn-primary">Send invite</button>
+                        </form>
+                    </div>
+                </div>
+            {% endif %}
+
+            {% if can_transfer_workspace_ownership %}
+                <div class="card border-0 shadow-sm mt-4">
+                    <div class="card-body">
+                        <h2 class="h5 mb-3">Transfer ownership</h2>
+                        <form method="post" action="{% url 'workspace-transfer-ownership' slug=workspace.slug %}" class="ttm-form">
+                            {% csrf_token %}
+                            <label for="id_membership_id" class="form-label">New owner</label>
+                            <select name="membership_id" id="id_membership_id" class="form-select mb-3">
+                                {% for membership in memberships %}
+                                    {% if membership.role != "owner" %}
+                                        <option value="{{ membership.id }}">{{ membership.user.username }} ({{ membership.get_role_display }})</option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-dark">Transfer ownership</button>
                         </form>
                     </div>
                 </div>

@@ -6,6 +6,8 @@ from core.permissions import (
     can_change_task_status,
     can_delete_comment,
     can_manage_invitations,
+    can_manage_membership,
+    can_transfer_workspace_ownership,
     can_update_task,
     can_view_project,
     can_view_task,
@@ -69,3 +71,19 @@ class ProjectArchivePermission(BasePermission):
 
     def has_object_permission(self, request, view, obj):
         return can_archive_project(project=obj, user=request.user)
+
+
+class MembershipManagementPermission(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        return can_manage_membership(membership=obj, user=request.user)
+
+
+class WorkspaceOwnershipTransferPermission(BasePermission):
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated)
+
+    def has_object_permission(self, request, view, obj):
+        return can_transfer_workspace_ownership(workspace=obj, user=request.user)

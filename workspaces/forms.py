@@ -15,3 +15,16 @@ class InvitationCreateForm(forms.Form):
             (MembershipRole.MEMBER, "Member"),
         )
     )
+
+
+class MembershipRoleUpdateForm(forms.Form):
+    role = forms.ChoiceField(
+        choices=(
+            (MembershipRole.ADMIN, "Admin"),
+            (MembershipRole.MEMBER, "Member"),
+        )
+    )
+
+
+class OwnershipTransferForm(forms.Form):
+    membership_id = forms.IntegerField(min_value=1)

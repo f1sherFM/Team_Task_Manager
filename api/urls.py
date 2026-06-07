@@ -14,6 +14,9 @@ from api.views import (
     TaskViewSet,
     WorkspaceActivityAPIView,
     WorkspaceInvitationListCreateAPIView,
+    WorkspaceInvitationRevokeAPIView,
+    WorkspaceMembershipDetailAPIView,
+    WorkspaceOwnershipTransferAPIView,
     WorkspaceViewSet,
 )
 
@@ -42,6 +45,21 @@ urlpatterns = [
         "workspaces/<slug:slug>/invitations/",
         WorkspaceInvitationListCreateAPIView.as_view(),
         name="api-workspace-invitations",
+    ),
+    path(
+        "workspaces/<slug:slug>/invitations/<int:invitation_id>/",
+        WorkspaceInvitationRevokeAPIView.as_view(),
+        name="api-workspace-invitation-detail",
+    ),
+    path(
+        "workspaces/<slug:slug>/memberships/<int:membership_id>/",
+        WorkspaceMembershipDetailAPIView.as_view(),
+        name="api-workspace-membership-detail",
+    ),
+    path(
+        "workspaces/<slug:slug>/transfer-ownership/",
+        WorkspaceOwnershipTransferAPIView.as_view(),
+        name="api-workspace-transfer-ownership",
     ),
     path(
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/",

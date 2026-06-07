@@ -12,7 +12,7 @@ from projects.models import Project
 from projects.services import archive_project, create_project
 from tasks.models import Task
 from tasks.services import assign_task, create_task
-from workspaces.models import Membership, MembershipRole
+from workspaces.models import Invitation, Membership, MembershipRole
 from workspaces.services import create_invitation, create_workspace
 
 User = get_user_model()
@@ -511,5 +511,89 @@ class ApiPermissionTests(TestCase):
         self.client.force_authenticate(self.member)
 
         response = self.client.delete(f"/api/comments/{self.comment.id}/")
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_update_membership_role_via_api(self):
+        membership = self.member.workspace_memberships.get(workspace=self.workspace)
+        self.client.force_authenticate(self.owner)
+
+        response = self.client.patch(
+            f"/api/workspaces/{self.workspace.slug}/memberships/{membership.id}/",
+            {"role": MembershipRole.ADMIN},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["role"], MembershipRole.ADMIN)
+
+    def test_admin_cannot_change_peer_admin_role_via_api(self):
+        peer_admin = User.objects.create_user(username="peer-admin", password="secret123")
+        peer_membership = Membership.objects.create(
+            workspace=self.workspace,
+            user=peer_admin,
+            role=MembershipRole.ADMIN,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.patch(
+            f"/api/workspaces/{self.workspace.slug}/memberships/{peer_membership.id}/",
+            {"role": MembershipRole.MEMBER},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 403)
+
+    def test_owner_can_remove_member_via_api(self):
+        membership = self.member.workspace_memberships.get(workspace=self.workspace)
+        self.client.force_authenticate(self.owner)
+
+        response = self.client.delete(
+            f"/api/workspaces/{self.workspace.slug}/memberships/{membership.id}/"
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Membership.objects.filter(id=membership.id).exists())
+
+    def test_admin_can_revoke_invitation_via_api(self):
+        invitation = create_invitation(
+            workspace=self.workspace,
+            email="candidate@example.com",
+            role=MembershipRole.MEMBER,
+            invited_by=self.owner,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.delete(
+            f"/api/workspaces/{self.workspace.slug}/invitations/{invitation.id}/"
+        )
+
+        self.assertEqual(response.status_code, 204)
+        self.assertFalse(Invitation.objects.filter(id=invitation.id).exists())
+
+    def test_owner_can_transfer_ownership_via_api(self):
+        target_membership = self.admin.workspace_memberships.get(workspace=self.workspace)
+        self.client.force_authenticate(self.owner)
+
+        response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/transfer-ownership/",
+            {"membership_id": target_membership.id},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["owner"], self.admin.username)
+        self.workspace.refresh_from_db()
+        self.assertEqual(self.workspace.owner, self.admin)
+
+    def test_admin_cannot_transfer_ownership_via_api(self):
+        target_membership = self.member.workspace_memberships.get(workspace=self.workspace)
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post(
+            f"/api/workspaces/{self.workspace.slug}/transfer-ownership/",
+            {"membership_id": target_membership.id},
+            format="json",
+        )
 
         self.assertEqual(response.status_code, 403)

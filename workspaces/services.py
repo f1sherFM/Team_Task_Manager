@@ -2,7 +2,12 @@ from django.db import transaction
 from django.utils import timezone
 
 from core.exceptions import DomainError
-from core.permissions import can_manage_invitations, has_membership_role
+from core.permissions import (
+    can_manage_invitations,
+    can_manage_membership,
+    can_transfer_workspace_ownership,
+    has_membership_role,
+)
 from core.slugs import create_with_unique_slug
 from workspaces.models import Invitation, Membership, MembershipRole, Workspace
 
@@ -78,7 +83,21 @@ def accept_invitation(*, invitation: Invitation, user) -> Membership:
 
 
 @transaction.atomic
-def change_membership_role(*, membership: Membership, role: str) -> Membership:
+def revoke_invitation(*, invitation: Invitation, actor) -> None:
+    if not can_manage_invitations(workspace=invitation.workspace, user=actor):
+        raise DomainError("Invitation revocation requires admin access.")
+
+    if invitation.accepted_at is not None:
+        raise DomainError("Accepted invitations cannot be revoked.")
+
+    invitation.delete()
+
+
+@transaction.atomic
+def change_membership_role(*, membership: Membership, role: str, actor) -> Membership:
+    if not can_manage_membership(membership=membership, user=actor):
+        raise DomainError("Membership role changes require elevated access.")
+
     if membership.role == MembershipRole.OWNER:
         raise DomainError("Owner membership cannot be changed.")
 
@@ -91,7 +110,42 @@ def change_membership_role(*, membership: Membership, role: str) -> Membership:
 
 
 @transaction.atomic
-def remove_membership(*, membership: Membership) -> None:
+def transfer_workspace_ownership(
+    *,
+    workspace: Workspace,
+    new_owner_membership: Membership,
+    actor,
+) -> Workspace:
+    if not can_transfer_workspace_ownership(workspace=workspace, user=actor):
+        raise DomainError("Ownership transfer requires the current workspace owner.")
+
+    if new_owner_membership.workspace_id != workspace.id:
+        raise DomainError("New owner must already be a member of this workspace.")
+
+    current_owner_membership = Membership.objects.get(
+        workspace=workspace,
+        user=workspace.owner,
+        role=MembershipRole.OWNER,
+    )
+    if new_owner_membership.id == current_owner_membership.id:
+        return workspace
+
+    current_owner_membership.role = MembershipRole.ADMIN
+    current_owner_membership.save(update_fields=["role"])
+
+    new_owner_membership.role = MembershipRole.OWNER
+    new_owner_membership.save(update_fields=["role"])
+
+    workspace.owner = new_owner_membership.user
+    workspace.save(update_fields=["owner", "updated_at"])
+    return workspace
+
+
+@transaction.atomic
+def remove_membership(*, membership: Membership, actor) -> None:
+    if not can_manage_membership(membership=membership, user=actor):
+        raise DomainError("Membership removal requires elevated access.")
+
     if membership.role == MembershipRole.OWNER:
         raise DomainError("Owner membership cannot be removed.")
 

@@ -11,9 +11,20 @@ from projects.services import archive_project, create_project, unarchive_project
 from tasks.models import Task
 from tasks.selectors import get_project_task_by_slug
 from tasks.services import UNSET, create_task, update_task
-from workspaces.models import Invitation, Workspace
-from workspaces.selectors import get_invitation_by_token, get_user_workspace_by_slug
-from workspaces.services import accept_invitation, create_invitation, create_workspace
+from workspaces.models import Invitation, Membership, Workspace
+from workspaces.selectors import (
+    get_invitation_by_token,
+    get_user_workspace_by_slug,
+    get_workspace_membership_by_id,
+)
+from workspaces.services import (
+    accept_invitation,
+    change_membership_role,
+    create_invitation,
+    create_workspace,
+    revoke_invitation,
+    transfer_workspace_ownership,
+)
 
 User = get_user_model()
 
@@ -265,6 +276,53 @@ class InvitationSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"detail": str(exc)}) from exc
 
 
+class MembershipSerializer(serializers.ModelSerializer):
+    user = serializers.CharField(source="user.username", read_only=True)
+    user_id = serializers.IntegerField(source="user.id", read_only=True)
+
+    class Meta:
+        model = Membership
+        fields = ("id", "user", "user_id", "role", "joined_at")
+        read_only_fields = ("id", "user", "user_id", "joined_at")
+
+    def update(self, instance, validated_data):
+        request = self.context["request"]
+        try:
+            return change_membership_role(
+                membership=instance,
+                role=validated_data["role"],
+                actor=request.user,
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+
+class WorkspaceOwnershipTransferSerializer(serializers.Serializer):
+    membership_id = serializers.IntegerField(min_value=1)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        workspace = self.context["workspace"]
+        try:
+            membership = get_workspace_membership_by_id(
+                workspace=workspace,
+                membership_id=validated_data["membership_id"],
+            )
+            return transfer_workspace_ownership(
+                workspace=workspace,
+                new_owner_membership=membership,
+                actor=request.user,
+            )
+        except (Membership.DoesNotExist, DomainError) as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+    def to_representation(self, instance):
+        return {
+            "workspace": instance.slug,
+            "owner": instance.owner.username,
+        }
+
+
 class InvitationAcceptSerializer(serializers.Serializer):
     token = serializers.UUIDField(read_only=True)
     workspace = serializers.CharField(read_only=True)
@@ -313,3 +371,16 @@ class ProjectArchiveSerializer(serializers.Serializer):
             "slug": instance.slug,
             "is_archived": instance.is_archived,
         }
+
+
+class InvitationRevokeSerializer(serializers.Serializer):
+    id = serializers.IntegerField(read_only=True)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        invitation = self.context["invitation"]
+        try:
+            revoke_invitation(invitation=invitation, actor=request.user)
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+        return invitation

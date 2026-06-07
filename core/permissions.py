@@ -37,6 +37,31 @@ def can_manage_invitations(*, workspace, user) -> bool:
     return can_manage_workspace(workspace=workspace, user=user)
 
 
+def can_transfer_workspace_ownership(*, workspace, user) -> bool:
+    from workspaces.models import MembershipRole
+
+    membership = get_workspace_membership(workspace=workspace, user=user)
+    return has_membership_role(membership, MembershipRole.OWNER)
+
+
+def can_manage_membership(*, membership, user) -> bool:
+    from workspaces.models import MembershipRole
+
+    actor_membership = get_workspace_membership(workspace=membership.workspace, user=user)
+    if actor_membership is None:
+        return False
+    if membership.role == MembershipRole.OWNER:
+        return (
+            actor_membership.role == MembershipRole.OWNER
+            and actor_membership.user_id == membership.user_id
+        )
+    if actor_membership.role == MembershipRole.OWNER:
+        return True
+    if actor_membership.role == MembershipRole.ADMIN:
+        return membership.role == MembershipRole.MEMBER
+    return False
+
+
 def can_view_project(*, project, user) -> bool:
     return can_view_workspace(workspace=project.workspace, user=user)
 
