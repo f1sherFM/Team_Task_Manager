@@ -414,6 +414,21 @@ Description: Follow-up work captured from a planning note
 - [ ] Add docs updates
 ```
 
+They can also maintain existing tasks when you add `Task Action: update_task` and
+optionally point each checklist item at a concrete existing task:
+
+```text
+Workspace: Engineering
+Project: Backend
+Task Action: update_task
+
+- [x] Ship markdown parser
+  task: ship-markdown-parser
+- [ ] Refresh docs title
+  task: existing-docs-task
+  title: Refresh docs title
+```
+
 Recommended usage for future Codex chats:
 
 - resolve the actor once with `--actor`
@@ -425,6 +440,7 @@ Recommended usage for future Codex chats:
 - use `agent_update_task` or `action: update_task` / `action: close_task` to keep existing work items current
 - prefer the structured `action/workspace/project/title/...` format when using `agent_capture_request`
 - use markdown checklists when a planning note already exists and the agent should turn it into concrete tasks
+- use `Task Action: update_task` in markdown briefs when the note should update or close existing tasks instead of creating new ones
 
 ## Testing
 

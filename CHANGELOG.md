@@ -20,6 +20,7 @@ for notable implementation milestones.
 - Added file-based agent automation so local briefs can be previewed and applied directly.
 - Added markdown checklist parsing for project briefs and task imports.
 - Agent automation now supports listing tasks and updating or closing existing tasks.
+- Markdown briefs can now drive maintenance flows for existing tasks via `Task Action: update_task`.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

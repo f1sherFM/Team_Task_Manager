@@ -510,7 +510,14 @@ def parse_markdown_brief(*, request_text: str) -> list[str]:
             current_task[normalized_key] = cleaned_value
             continue
 
-        if normalized_key in {"workspace", "project", "action", "name", "description"}:
+        if normalized_key in {
+            "workspace",
+            "project",
+            "action",
+            "task_action",
+            "name",
+            "description",
+        }:
             metadata[normalized_key] = cleaned_value
 
     if not saw_task_bullet:

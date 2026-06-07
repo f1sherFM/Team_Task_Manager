@@ -376,6 +376,26 @@ class AgentAutomationTests(TestCase):
         self.assertEqual(payload[0]["action"], "create_task")
         self.assertEqual(payload[0]["project"], self.project.slug)
 
+    def test_parse_markdown_brief_supports_task_action_metadata(self):
+        chunks = parse_markdown_brief(
+            request_text=(
+                "Workspace: Engineering\n"
+                "Project: Backend Platform\n"
+                "Task Action: update_task\n"
+                "- [x] Ship markdown parser\n"
+                "  task: Ship markdown parser\n"
+                "- [ ] Refresh docs title\n"
+                "  task: Existing docs task\n"
+                "  title: Refresh docs title\n"
+            )
+        )
+
+        self.assertEqual(len(chunks), 2)
+        self.assertIn("action: update_task", chunks[0])
+        self.assertIn("status: done", chunks[0])
+        self.assertIn("task: Existing docs task", chunks[1])
+        self.assertIn("title: Refresh docs title", chunks[1])
+
     def test_execute_agent_request_supports_update_task(self):
         task = create_task_for_agent(
             actor_ref="owner",
@@ -398,6 +418,29 @@ class AgentAutomationTests(TestCase):
 
         self.assertEqual(payload["action"], "update_task")
         self.assertEqual(payload["status"], TaskStatus.DONE)
+
+    def test_execute_agent_batch_request_supports_markdown_update_flow(self):
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            title="Ship markdown parser",
+        )
+
+        payload = execute_agent_batch_request(
+            actor_ref="owner",
+            request_text=(
+                "Workspace: Engineering\n"
+                "Project: Backend Platform\n"
+                "Task Action: update_task\n"
+                "- [x] Ship markdown parser\n"
+                "  task: Ship markdown parser\n"
+            ),
+        )
+
+        task.refresh_from_db()
+        self.assertEqual(payload[0]["action"], "update_task")
+        self.assertEqual(task.status, TaskStatus.DONE)
 
     def test_agent_update_task_command_updates_task(self):
         task = create_task_for_agent(
