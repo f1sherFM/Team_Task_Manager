@@ -18,6 +18,8 @@ for notable implementation milestones.
 - Local agent automation commands for listing workspaces and projects and creating projects or tasks through Django services.
 - Agent capture requests now support preview mode and batch execution for safer Codex-driven automation.
 - Added file-based agent automation so local briefs can be previewed and applied directly.
+- Added markdown checklist parsing for project briefs and task imports.
+- Agent automation now supports listing tasks and updating or closing existing tasks.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

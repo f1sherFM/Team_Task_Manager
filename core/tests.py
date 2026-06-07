@@ -9,16 +9,20 @@ from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 
 from core.agent import (
+    close_task_for_agent,
     create_project_for_agent,
     create_task_for_agent,
     execute_agent_batch_request,
     execute_agent_file_request,
     execute_agent_request,
+    expand_agent_request_text,
+    parse_markdown_brief,
     preview_agent_request,
+    update_task_for_agent,
 )
 from core.health import get_readiness_status
 from projects.services import create_project
-from tasks.models import TaskPriority
+from tasks.models import TaskPriority, TaskStatus
 from workspaces.models import Membership, MembershipRole
 from workspaces.services import create_workspace
 
@@ -168,6 +172,43 @@ class AgentAutomationTests(TestCase):
         self.assertEqual(payload["project"], self.project.slug)
         self.assertEqual(payload["title"], "Document CLI flow")
 
+    def test_update_task_for_agent_updates_existing_task(self):
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            title="Refine import flow",
+        )
+
+        updated_task = update_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            task_ref=task.slug,
+            description="Updated by agent",
+            status=TaskStatus.IN_PROGRESS,
+        )
+
+        self.assertEqual(updated_task.description, "Updated by agent")
+        self.assertEqual(updated_task.status, TaskStatus.IN_PROGRESS)
+
+    def test_close_task_for_agent_marks_task_done(self):
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            title="Close me",
+        )
+
+        closed_task = close_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            task_ref=task.title,
+        )
+
+        self.assertEqual(closed_task.status, TaskStatus.DONE)
+
     def test_agent_capture_request_command_rejects_unsupported_request(self):
         with self.assertRaises(CommandError):
             call_command(
@@ -211,6 +252,25 @@ class AgentAutomationTests(TestCase):
         self.assertEqual(len(payload), 2)
         self.assertEqual(payload[0]["action"], "create_project")
         self.assertEqual(payload[1]["action"], "create_task")
+
+    def test_execute_agent_batch_request_preview_supports_future_project(self):
+        payload = execute_agent_batch_request(
+            actor_ref="owner",
+            request_text=(
+                "action: create_project\n"
+                "workspace: Engineering\n"
+                "name: Preview Project\n"
+                "---\n"
+                "action: create_task\n"
+                "workspace: Engineering\n"
+                "project: Preview Project\n"
+                "title: Preview task against future project\n"
+            ),
+            preview=True,
+        )
+
+        self.assertEqual(payload[0]["project_slug"], "preview-project")
+        self.assertEqual(payload[1]["project_slug"], "preview-project")
 
     def test_agent_capture_request_command_supports_preview(self):
         call_command(
@@ -266,3 +326,97 @@ class AgentAutomationTests(TestCase):
         payload = json.loads(self.stdout.getvalue())
         self.assertEqual(payload[0]["title"], "Preview file task")
         self.assertEqual(payload[0]["project_slug"], self.project.slug)
+
+    def test_parse_markdown_brief_supports_project_and_task_blocks(self):
+        chunks = parse_markdown_brief(
+            request_text=(
+                "# Workspace: Engineering\n"
+                "# Project: Agent Extensions\n"
+                "Action: create_project\n"
+                "Description: Tasks imported from markdown\n"
+                "\n"
+                "- [ ] Add parser support\n"
+                "  priority: high\n"
+                "  assignee: member\n"
+                "- [ ] Add docs updates\n"
+            )
+        )
+
+        self.assertEqual(len(chunks), 3)
+        self.assertIn("action: create_project", chunks[0])
+        self.assertIn("title: Add parser support", chunks[1])
+        self.assertIn("title: Add docs updates", chunks[2])
+
+    def test_expand_agent_request_text_prefers_markdown_brief_when_no_separator(self):
+        chunks = expand_agent_request_text(
+            request_text=(
+                "Workspace: Engineering\n"
+                "Project: Backend Platform\n"
+                "- Add markdown import\n"
+            )
+        )
+
+        self.assertEqual(len(chunks), 1)
+        self.assertIn("action: create_task", chunks[0])
+        self.assertIn("title: Add markdown import", chunks[0])
+
+    def test_execute_agent_batch_request_supports_markdown_brief(self):
+        payload = execute_agent_batch_request(
+            actor_ref="owner",
+            request_text=(
+                "Workspace: Engineering\n"
+                "Project: Backend Platform\n"
+                "- [ ] Ship markdown parser\n"
+                "  priority: high\n"
+                "  assignee: member\n"
+            ),
+        )
+
+        self.assertEqual(len(payload), 1)
+        self.assertEqual(payload[0]["action"], "create_task")
+        self.assertEqual(payload[0]["project"], self.project.slug)
+
+    def test_execute_agent_request_supports_update_task(self):
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            title="Agent update target",
+        )
+
+        payload = execute_agent_request(
+            actor_ref="owner",
+            request_text=(
+                "action: update_task\n"
+                f"workspace: {self.workspace.slug}\n"
+                f"project: {self.project.slug}\n"
+                f"task: {task.slug}\n"
+                "status: done\n"
+                "description: Completed through agent automation\n"
+            ),
+        )
+
+        self.assertEqual(payload["action"], "update_task")
+        self.assertEqual(payload["status"], TaskStatus.DONE)
+
+    def test_agent_update_task_command_updates_task(self):
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+            project_ref=self.project.slug,
+            title="CLI update target",
+        )
+
+        call_command(
+            "agent_update_task",
+            actor="owner",
+            workspace=self.workspace.slug,
+            project=self.project.slug,
+            task=task.slug,
+            status="done",
+            stdout=self.stdout,
+        )
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload["task"], task.slug)
+        self.assertEqual(payload["status"], TaskStatus.DONE)

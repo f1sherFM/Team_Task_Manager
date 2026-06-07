@@ -338,8 +338,10 @@ Useful commands:
 ```bash
 python manage.py agent_list_workspaces --actor owner
 python manage.py agent_list_projects --actor owner --workspace engineering
+python manage.py agent_list_tasks --actor owner --workspace engineering --project backend
 python manage.py agent_create_project --actor owner --workspace engineering --name "Ops Console"
 python manage.py agent_create_task --actor owner --workspace engineering --project backend --title "Add audit export"
+python manage.py agent_update_task --actor owner --workspace engineering --project backend --task ship-api --status done
 ```
 
 There is also a higher-level capture command for structured requests:
@@ -398,6 +400,20 @@ priority: high
 assignee: alice
 ```
 
+Markdown checklists also work when they include workspace/project context:
+
+```text
+# Workspace: Engineering
+# Project: Agent Extensions
+Action: create_project
+Description: Follow-up work captured from a planning note
+
+- [ ] Add parser support
+  priority: high
+  assignee: alice
+- [ ] Add docs updates
+```
+
 Recommended usage for future Codex chats:
 
 - resolve the actor once with `--actor`
@@ -406,7 +422,9 @@ Recommended usage for future Codex chats:
 - use `agent_apply_file` when the chat already has a local brief, markdown note, or generated task plan
 - batch related creations in one call when they belong to the same user request
 - create the project or task through management commands instead of calling REST endpoints
+- use `agent_update_task` or `action: update_task` / `action: close_task` to keep existing work items current
 - prefer the structured `action/workspace/project/title/...` format when using `agent_capture_request`
+- use markdown checklists when a planning note already exists and the agent should turn it into concrete tasks
 
 ## Testing
 
