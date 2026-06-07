@@ -152,6 +152,56 @@ def execute_agent_request(*, actor_ref: str, request_text: str) -> dict:
     }
 
 
+def preview_agent_request(*, actor_ref: str, request_text: str) -> dict:
+    actor = resolve_actor(actor_ref=actor_ref)
+    parsed_request = parse_agent_request(request_text=request_text)
+    payload = {
+        "action": parsed_request.action,
+        "actor": actor.username,
+        "workspace": parsed_request.workspace,
+        "project": parsed_request.project,
+        "title": parsed_request.title,
+        "name": parsed_request.name,
+        "description": parsed_request.description,
+        "priority": parsed_request.priority,
+        "due_date": parsed_request.due_date.isoformat() if parsed_request.due_date else None,
+        "assignee": parsed_request.assignee,
+        "status": parsed_request.status,
+    }
+    if parsed_request.workspace:
+        workspace = resolve_workspace(actor=actor, workspace_ref=parsed_request.workspace)
+        payload["workspace_slug"] = workspace.slug
+    if parsed_request.workspace and parsed_request.project:
+        workspace = resolve_workspace(actor=actor, workspace_ref=parsed_request.workspace)
+        project = resolve_project(
+            actor=actor,
+            workspace=workspace,
+            project_ref=parsed_request.project,
+        )
+        payload["project_slug"] = project.slug
+    if parsed_request.workspace and parsed_request.assignee:
+        workspace = resolve_workspace(actor=actor, workspace_ref=parsed_request.workspace)
+        assignee = resolve_workspace_user(workspace=workspace, user_ref=parsed_request.assignee)
+        payload["assignee_username"] = assignee.username
+    return payload
+
+
+def execute_agent_batch_request(
+    *,
+    actor_ref: str,
+    request_text: str,
+    preview: bool = False,
+) -> list[dict]:
+    request_chunks = split_batch_request(request_text=request_text)
+    if not request_chunks:
+        raise DomainError("No agent requests were found in the batch payload.")
+    executor = preview_agent_request if preview else execute_agent_request
+    return [
+        executor(actor_ref=actor_ref, request_text=request_chunk)
+        for request_chunk in request_chunks
+    ]
+
+
 def parse_agent_request(*, request_text: str) -> AgentParsedRequest:
     normalized_request = request_text.strip()
     lower_request = normalized_request.lower()
@@ -205,6 +255,15 @@ def parse_agent_request(*, request_text: str) -> AgentParsedRequest:
         assignee=assignee,
         status=status,
     )
+
+
+def split_batch_request(*, request_text: str) -> list[str]:
+    chunks = [
+        chunk.strip()
+        for chunk in re.split(r"\n\s*---+\s*\n", request_text.strip())
+        if chunk.strip()
+    ]
+    return chunks
 
 
 def resolve_actor(*, actor_ref: str):

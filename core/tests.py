@@ -7,7 +7,13 @@ from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import SimpleTestCase, TestCase
 
-from core.agent import create_project_for_agent, create_task_for_agent, execute_agent_request
+from core.agent import (
+    create_project_for_agent,
+    create_task_for_agent,
+    execute_agent_batch_request,
+    execute_agent_request,
+    preview_agent_request,
+)
 from core.health import get_readiness_status
 from projects.services import create_project
 from tasks.models import TaskPriority
@@ -163,3 +169,56 @@ class AgentAutomationTests(TestCase):
                 request="please do something vague",
                 stdout=self.stdout,
             )
+
+    def test_preview_agent_request_resolves_slugs_without_writes(self):
+        payload = preview_agent_request(
+            actor_ref="owner",
+            request_text=(
+                "action: create_task\n"
+                "workspace: Engineering\n"
+                "project: Backend Platform\n"
+                "title: Preview agent flow\n"
+                "assignee: member\n"
+            ),
+        )
+
+        self.assertEqual(payload["workspace_slug"], self.workspace.slug)
+        self.assertEqual(payload["project_slug"], self.project.slug)
+        self.assertEqual(payload["assignee_username"], self.member.username)
+
+    def test_execute_agent_batch_request_handles_multiple_blocks(self):
+        payload = execute_agent_batch_request(
+            actor_ref="owner",
+            request_text=(
+                "action: create_project\n"
+                "workspace: Engineering\n"
+                "name: Agent Extensions\n"
+                "---\n"
+                "action: create_task\n"
+                "workspace: Engineering\n"
+                "project: Backend Platform\n"
+                "title: Add batch automation support\n"
+            ),
+        )
+
+        self.assertEqual(len(payload), 2)
+        self.assertEqual(payload[0]["action"], "create_project")
+        self.assertEqual(payload[1]["action"], "create_task")
+
+    def test_agent_capture_request_command_supports_preview(self):
+        call_command(
+            "agent_capture_request",
+            actor="owner",
+            request=(
+                "action: create_task\n"
+                "workspace: Engineering\n"
+                "project: Backend Platform\n"
+                "title: Preview-only task\n"
+            ),
+            preview=True,
+            stdout=self.stdout,
+        )
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload[0]["title"], "Preview-only task")
+        self.assertEqual(payload[0]["project_slug"], self.project.slug)
