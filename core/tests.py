@@ -16,11 +16,20 @@ from core.agent import (
     execute_agent_file_request,
     execute_agent_request,
     expand_agent_request_text,
+    list_members_for_agent,
     parse_markdown_brief,
     preview_agent_request,
     update_task_for_agent,
 )
 from core.health import get_readiness_status
+from core.mcp_server import (
+    resolve_actor_ref,
+    ttm_apply_request,
+    ttm_create_task,
+    ttm_get_context,
+    ttm_list_members,
+    ttm_list_workspaces,
+)
 from projects.services import create_project
 from tasks.models import TaskPriority, TaskStatus
 from workspaces.models import Membership, MembershipRole
@@ -175,6 +184,27 @@ class AgentAutomationTests(TestCase):
 
         payload = json.loads(self.stdout.getvalue())
         self.assertEqual(payload[0]["slug"], self.workspace.slug)
+
+    def test_list_members_for_agent_returns_workspace_members(self):
+        payload = list_members_for_agent(
+            actor_ref="owner",
+            workspace_ref=self.workspace.slug,
+        )
+
+        self.assertEqual(payload[0]["username"], "member")
+        self.assertEqual(payload[1]["username"], "owner")
+
+    def test_agent_list_members_command_outputs_json(self):
+        call_command(
+            "agent_list_members",
+            actor="owner",
+            workspace=self.workspace.slug,
+            stdout=self.stdout,
+        )
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(len(payload), 2)
+        self.assertEqual(payload[0]["role"], MembershipRole.MEMBER)
 
     def test_agent_create_task_command_creates_task(self):
         call_command(
@@ -500,3 +530,94 @@ class AgentAutomationTests(TestCase):
         payload = json.loads(self.stdout.getvalue())
         self.assertEqual(payload["task"], task.slug)
         self.assertEqual(payload["status"], TaskStatus.DONE)
+
+
+class AgentMCPServerTests(TestCase):
+    def setUp(self):
+        self.User = get_user_model()
+        self.owner = self.User.objects.create_user(
+            username="owner",
+            email="owner@example.com",
+            password="secret123",
+        )
+        self.member = self.User.objects.create_user(
+            username="member",
+            email="member@example.com",
+            password="secret123",
+        )
+        self.workspace = create_workspace(owner=self.owner, name="Engineering")
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.member,
+            role=MembershipRole.MEMBER,
+        )
+        self.project = create_project(
+            workspace=self.workspace,
+            name="Backend Platform",
+            description="Primary backend project",
+            created_by=self.owner,
+        )
+
+    @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
+    def test_resolve_actor_ref_uses_default_actor_when_omitted(self):
+        self.assertEqual(resolve_actor_ref(None), "owner")
+
+    @patch.dict("os.environ", {}, clear=True)
+    def test_resolve_actor_ref_requires_explicit_or_default_actor(self):
+        with self.assertRaisesMessage(
+            ValueError,
+            (
+                "No actor was provided. Set TTM_AGENT_DEFAULT_ACTOR in the "
+                "plugin config or pass actor_ref."
+            ),
+        ):
+            resolve_actor_ref(None)
+
+    @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
+    def test_ttm_get_context_reports_repo_root_and_default_actor(self):
+        payload = ttm_get_context()
+
+        self.assertEqual(payload["default_actor"], "owner")
+        self.assertTrue(payload["repo_root"].endswith("Team_Task_Manager"))
+
+    @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
+    def test_ttm_list_workspaces_uses_default_actor(self):
+        payload = ttm_list_workspaces()
+
+        self.assertEqual(payload[0]["slug"], self.workspace.slug)
+
+    @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
+    def test_ttm_list_members_returns_workspace_members(self):
+        payload = ttm_list_members(workspace_ref="Engineering")
+
+        self.assertEqual(len(payload), 2)
+        self.assertEqual(payload[0]["username"], "member")
+
+    @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
+    def test_ttm_create_task_returns_serialized_task_payload(self):
+        payload = ttm_create_task(
+            workspace_ref="Engineering",
+            project_ref="Backend Platform",
+            title="Create from MCP",
+            assignee_ref="member",
+            priority=TaskPriority.HIGH,
+        )
+
+        self.assertEqual(payload["project"], self.project.slug)
+        self.assertEqual(payload["assignee"], "member")
+        self.assertEqual(payload["priority"], TaskPriority.HIGH)
+
+    @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
+    def test_ttm_apply_request_supports_preview(self):
+        payload = ttm_apply_request(
+            request_text=(
+                "action: create_task\n"
+                "workspace: Engineering\n"
+                "project: Backend Platform\n"
+                "title: Preview from MCP\n"
+            ),
+            preview=True,
+        )
+
+        self.assertEqual(payload[0]["title"], "Preview from MCP")
+        self.assertEqual(payload[0]["project_slug"], self.project.slug)

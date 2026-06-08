@@ -22,6 +22,7 @@ for notable implementation milestones.
 - Agent automation now supports listing tasks and updating or closing existing tasks.
 - Markdown briefs can now drive maintenance flows for existing tasks via `Task Action: update_task`.
 - Added Russian aliases for structured and markdown automation requests.
+- Added a repo-side MCP server for Codex, including native tools for workspace, member, project, and task automation.
 
 ### Changed
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

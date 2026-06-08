@@ -456,6 +456,28 @@ Recommended usage for future Codex chats:
 - use `Task Action: update_task` in markdown briefs when the note should update or close existing tasks instead of creating new ones
 - feel free to write structured keys in Russian when that is more natural for the chat flow
 
+## Codex Plugin Mode
+
+The repo now also exposes a native MCP server for Codex at [core/mcp_server.py](C:/Team_Task_Manager/core/mcp_server.py).
+
+That server wraps the same Django domain services used by HTML, API, and management commands, so future Codex chats can call TTM as local tools instead of driving the browser or composing raw API requests.
+
+Available MCP tools:
+
+- `ttm_get_context`
+- `ttm_list_workspaces`
+- `ttm_list_projects`
+- `ttm_list_members`
+- `ttm_list_tasks`
+- `ttm_create_project`
+- `ttm_create_task`
+- `ttm_update_task`
+- `ttm_close_task`
+- `ttm_apply_request`
+- `ttm_apply_file`
+
+The MCP server supports a default actor via `TTM_AGENT_DEFAULT_ACTOR`, so a new Codex chat can often create and maintain work items without passing an actor on every tool call.
+
 ## Testing
 
 Run the service and API tests with:

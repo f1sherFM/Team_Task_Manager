@@ -15,7 +15,7 @@ from tasks.models import TaskPriority, TaskStatus
 from tasks.selectors import get_project_tasks
 from tasks.services import UNSET, create_task, update_task
 from workspaces.models import Membership, Workspace
-from workspaces.selectors import get_user_workspaces
+from workspaces.selectors import get_user_workspaces, get_workspace_members
 
 User = get_user_model()
 
@@ -136,6 +136,20 @@ def list_projects_for_agent(*, actor_ref: str, workspace_ref: str) -> list[dict]
             "is_archived": project.is_archived,
         }
         for project in projects
+    ]
+
+
+def list_members_for_agent(*, actor_ref: str, workspace_ref: str) -> list[dict]:
+    actor = resolve_actor(actor_ref=actor_ref)
+    workspace = resolve_workspace(actor=actor, workspace_ref=workspace_ref)
+    memberships = get_workspace_members(workspace=workspace).order_by("user__username")
+    return [
+        {
+            "username": membership.user.username,
+            "email": membership.user.email,
+            "role": membership.role,
+        }
+        for membership in memberships
     ]
 
 
