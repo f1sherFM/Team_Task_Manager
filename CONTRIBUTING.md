@@ -15,6 +15,39 @@ Please preserve that structure when proposing changes.
 
 ## Local Setup
 
+TTM is PostgreSQL-first in local development. SQLite fallback is supported for quick demos, but normal development and CI should target PostgreSQL.
+
+Recommended Windows flow:
+
+1. Copy environment variables:
+
+```bash
+copy .env.example .env
+```
+
+2. Configure PostgreSQL in `.env`.
+3. Bootstrap the local environment:
+
+```bash
+bootstrap_ttm_local.cmd
+```
+
+4. Optional demo data:
+
+```bash
+seed_ttm_demo.cmd
+```
+
+5. Run checks:
+
+```bash
+lint_ttm_local.cmd
+test_ttm_local.cmd
+check_ttm_integrity.cmd
+```
+
+Manual flow:
+
 1. Create and activate a virtual environment.
 2. Install dependencies:
 
@@ -59,6 +92,7 @@ python -m ruff check .
 ```bash
 python manage.py check
 python manage.py makemigrations --check --dry-run
+python manage.py check_domain_integrity
 ```
 
 ## Coding Expectations
@@ -68,6 +102,7 @@ python manage.py makemigrations --check --dry-run
 - Add or update tests for every behavior change, especially around permissions and workflows.
 - Prefer small, reviewable commits with clear messages.
 - Do not mutate slugs after object creation.
+- Keep demo data and integrity tooling deterministic so local smoke checks stay trustworthy.
 
 ## Pull Requests
 
@@ -78,7 +113,7 @@ When opening a pull request, please include:
 - notes about permissions, migrations, or backward compatibility
 - test coverage details
 
-GitHub Actions will run linting, Django checks, migration drift checks, and the full test suite.
+GitHub Actions will run linting, Django checks, migration drift checks, PostgreSQL-backed tests, and coverage reporting.
 
 Good PR examples for this repository:
 

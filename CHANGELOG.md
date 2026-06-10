@@ -8,6 +8,10 @@ for notable implementation milestones.
 ## [Unreleased]
 
 ### Added
+- Postgres-first local operational tooling with Windows-friendly helper scripts for bootstrap, linting, tests, demo seeding, and integrity checks.
+- `seed_demo_data` management command for deterministic local demo environments.
+- `check_domain_integrity` management command for owner, invitation, task assignment, and deleted-comment invariants.
+- Structured logging baseline with stable workspace, project, task, user, and action context fields.
 - Workspace invitation flows in HTML and API, including invitation acceptance by token.
 - Project archive and unarchive workflows in services, HTML pages, and DRF endpoints.
 - Read-only enforcement for archived projects across task and comment mutations.
@@ -25,6 +29,8 @@ for notable implementation milestones.
 - Added a repo-side MCP server for Codex, including native tools for workspace, member, project, and task automation.
 
 ### Changed
+- GitHub Actions CI is now split into `lint`, `django-check`, `tests`, and `coverage` jobs, with PostgreSQL-backed test execution and a coverage artifact.
+- Local bootstrap no longer depends exclusively on the `py` launcher and can fall back to the bundled Codex Python runtime.
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.
 - Task HTML editing now updates full task details through the shared task service workflow.
 - README now documents invitation and archive endpoints and the archived project behavior.

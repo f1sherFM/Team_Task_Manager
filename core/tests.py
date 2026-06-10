@@ -23,6 +23,7 @@ from core.agent import (
     update_task_for_agent,
 )
 from core.health import get_readiness_status
+from core.integrity import run_integrity_checks
 from core.mcp_server import (
     resolve_actor_ref,
     ttm_apply_request,
@@ -31,9 +32,11 @@ from core.mcp_server import (
     ttm_list_members,
     ttm_list_workspaces,
 )
+from core.seed import seed_demo_data
+from projects.models import Project
 from projects.services import create_project
-from tasks.models import TaskPriority, TaskStatus
-from workspaces.models import Membership, MembershipRole
+from tasks.models import Task, TaskPriority, TaskStatus
+from workspaces.models import Invitation, Membership, MembershipRole, Workspace
 from workspaces.services import create_workspace
 
 
@@ -622,3 +625,115 @@ class AgentMCPServerTests(TestCase):
 
         self.assertEqual(payload[0]["title"], "Preview from MCP")
         self.assertEqual(payload[0]["project_slug"], self.project.slug)
+
+
+class SeedAndIntegrityTests(TestCase):
+    def setUp(self):
+        self.stdout = StringIO()
+        self.User = get_user_model()
+
+    def test_seed_demo_data_creates_expected_baseline(self):
+        payload = seed_demo_data(password="demo-pass-123")
+
+        self.assertEqual(payload["workspace_slug"], "north-star-studio")
+        self.assertTrue(self.User.objects.filter(username="demo_ui").exists())
+        self.assertTrue(self.User.objects.filter(username="ops_admin").exists())
+        self.assertTrue(self.User.objects.filter(username="teammate").exists())
+        self.assertTrue(Workspace.objects.filter(slug="north-star-studio").exists())
+        self.assertGreaterEqual(payload["projects"], 3)
+        self.assertGreaterEqual(payload["tasks"], 7)
+        self.assertGreaterEqual(payload["comments"], 2)
+        self.assertGreaterEqual(payload["invitations"], 1)
+
+    def test_seed_demo_data_is_idempotent(self):
+        first = seed_demo_data(password="demo-pass-123")
+        second = seed_demo_data(password="demo-pass-123")
+
+        self.assertEqual(Workspace.objects.filter(slug="north-star-studio").count(), 1)
+        self.assertEqual(self.User.objects.filter(username="demo_ui").count(), 1)
+        self.assertEqual(Project.objects.filter(workspace__slug="north-star-studio").count(), 3)
+        self.assertEqual(
+            Task.objects.filter(project__workspace__slug="north-star-studio").count(),
+            7,
+        )
+        self.assertEqual(
+            Invitation.objects.filter(
+                workspace__slug="north-star-studio",
+                email="newhire@example.com",
+                accepted_at__isnull=True,
+            ).count(),
+            1,
+        )
+        self.assertEqual(second["workspace"], 0)
+        self.assertEqual(second["projects"], 0)
+        self.assertEqual(second["tasks"], 0)
+        self.assertEqual(second["comments"], 0)
+        self.assertGreaterEqual(first["projects"], second["projects"])
+
+    def test_seed_demo_data_command_outputs_json(self):
+        call_command("seed_demo_data", stdout=self.stdout)
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload["workspace_slug"], "north-star-studio")
+        self.assertEqual(payload["password"], "demo12345")
+
+    def test_integrity_check_passes_for_seeded_data(self):
+        seed_demo_data()
+
+        self.assertEqual(run_integrity_checks(), [])
+
+    def test_integrity_check_reports_owner_membership_violation(self):
+        workspace = create_workspace(owner=self.User.objects.create_user("owner"), name="Ops Team")
+        rogue_user = self.User.objects.create_user("rogue", email="rogue@example.com")
+        Membership.objects.create(
+            workspace=workspace,
+            user=rogue_user,
+            role=MembershipRole.OWNER,
+        )
+
+        issues = run_integrity_checks()
+
+        self.assertIn("Workspace ops-team has 2 owner memberships.", issues)
+
+    def test_integrity_check_reports_accepted_invitation_without_membership(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        Invitation.objects.create(
+            workspace=workspace,
+            email="accepted@example.com",
+            role=MembershipRole.MEMBER,
+            invited_by=owner,
+            accepted_at=workspace.created_at,
+        )
+
+        issues = run_integrity_checks()
+
+        self.assertIn(
+            (
+                "Accepted invitation for accepted@example.com in workspace "
+                "ops-team has no matching membership."
+            ),
+            issues,
+        )
+
+    def test_integrity_command_fails_when_deleted_comment_keeps_text(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        project = create_project(
+            workspace=workspace,
+            name="Ops Project",
+            description="",
+            created_by=owner,
+        )
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=workspace.slug,
+            project_ref=project.slug,
+            title="Integrity target",
+        )
+        task.comments.create(author=owner, text="should be blank", is_deleted=True)
+
+        with self.assertRaises(CommandError):
+            call_command("check_domain_integrity", stdout=self.stdout, stderr=self.stdout)
+
+        self.assertIn("Deleted comment", self.stdout.getvalue())

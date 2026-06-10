@@ -139,6 +139,37 @@ Important files:
 
 ## Quick Start
 
+TTM is PostgreSQL-first in local development. SQLite remains available as a secondary fallback for quick demos and agent smoke tests when `DATABASE_URL` is intentionally unset.
+
+Recommended Windows flow:
+
+1. Copy environment settings:
+
+```bash
+copy .env.example .env
+```
+
+2. Set `DATABASE_URL` to your local PostgreSQL instance.
+3. Bootstrap the local environment:
+
+```bash
+bootstrap_ttm_local.cmd
+```
+
+4. Seed demo data when you want a ready-to-browse workspace:
+
+```bash
+seed_ttm_demo.cmd
+```
+
+5. Start the local server:
+
+```bash
+start_ttm_local.cmd
+```
+
+Manual flow:
+
 1. Create and activate a virtual environment.
 2. Install dependencies:
 
@@ -153,8 +184,6 @@ copy .env.example .env
 ```
 
 4. Update `.env` values as needed.
-
-The project reads `.env` automatically. If `DATABASE_URL` is omitted, Django falls back to local SQLite at `db.sqlite3`.
 
 5. Run migrations:
 
@@ -174,6 +203,8 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+The project reads `.env` automatically. If `DATABASE_URL` is omitted, Django falls back to local SQLite at `db.sqlite3`. That path is supported for quick local use, but PostgreSQL is the main development target.
+
 ## Database Configuration
 
 TTM reads the main database connection from `DATABASE_URL`.
@@ -192,6 +223,19 @@ sqlite:///db.sqlite3
 ```
 
 That fallback is convenient for development, but production should always use PostgreSQL.
+
+## Local Tooling
+
+Windows-friendly helper scripts in the repository root:
+
+- `bootstrap_ttm_local.cmd`: rebuild `.venv`, install dependencies, and run migrations
+- `start_ttm_local.cmd`: run the site on `127.0.0.1:8000`
+- `test_ttm_local.cmd`: run the Django test suite
+- `lint_ttm_local.cmd`: run `ruff`
+- `seed_ttm_demo.cmd`: create or refresh deterministic demo data
+- `check_ttm_integrity.cmd`: run domain integrity checks and return non-zero on failures
+
+`bootstrap_ttm_local.cmd` prefers `py -3.13` when it is healthy and falls back to the bundled Codex Python runtime when the Windows launcher is unavailable or broken.
 
 ## Deployment
 
@@ -419,10 +463,22 @@ python manage.py makemigrations --check --dry-run
 python -m ruff check .
 ```
 
+Coverage:
+
+```bash
+coverage run --source=accounts,activity,api,comments,core,projects,tasks,workspaces manage.py test
+coverage report --show-missing
+```
+
 Operational endpoints:
 
 - `GET /healthz/`: liveness probe for the Django process
 - `GET /readyz/`: readiness probe that verifies database access and unapplied migrations
+
+Operational commands:
+
+- `python manage.py seed_demo_data`
+- `python manage.py check_domain_integrity`
 
 ## CI
 
@@ -431,7 +487,7 @@ GitHub Actions runs on pushes to `master` and on pull requests.
 The workflow:
 
 - installs dependencies on Python 3.13
-- runs `ruff`
-- runs `python manage.py check`
-- verifies migrations are in sync
-- runs the Django test suite
+- runs a dedicated `lint` job
+- runs a dedicated `django-check` job with migration drift checks
+- runs PostgreSQL-backed tests
+- publishes a coverage artifact from a separate coverage job

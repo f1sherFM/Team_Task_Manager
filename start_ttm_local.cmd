@@ -8,13 +8,11 @@ set "PYTHON_EXE=%ROOT%.venv\Scripts\python.exe"
 set "SITE_URL=http://127.0.0.1:8000/"
 
 if not exist "%PYTHON_EXE%" (
-    echo [TTM] Python virtual environment was not found at:
-    echo        %PYTHON_EXE%
-    echo.
-    echo [TTM] Create the environment first, then try again.
-    pause
-    exit /b 1
+    goto :missing
 )
+
+"%PYTHON_EXE%" --version >nul 2>&1
+if errorlevel 1 goto :missing
 
 for /f "tokens=5" %%P in ('netstat -ano ^| findstr /R /C:":8000 .*LISTENING"') do (
     set "TTM_PORT_BUSY=1"
@@ -31,3 +29,10 @@ start "" "%SITE_URL%"
 "%PYTHON_EXE%" manage.py runserver 127.0.0.1:8000
 
 endlocal
+exit /b 0
+
+:missing
+echo [TTM] Local Python environment is missing or invalid.
+echo [TTM] Run bootstrap_ttm_local.cmd first.
+pause
+exit /b 1
