@@ -3,6 +3,7 @@ from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
+from asgiref.sync import async_to_sync
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -582,20 +583,20 @@ class AgentMCPServerTests(TestCase):
 
     @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
     def test_ttm_list_workspaces_uses_default_actor(self):
-        payload = ttm_list_workspaces()
+        payload = async_to_sync(ttm_list_workspaces)()
 
         self.assertEqual(payload[0]["slug"], self.workspace.slug)
 
     @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
     def test_ttm_list_members_returns_workspace_members(self):
-        payload = ttm_list_members(workspace_ref="Engineering")
+        payload = async_to_sync(ttm_list_members)(workspace_ref="Engineering")
 
         self.assertEqual(len(payload), 2)
         self.assertEqual(payload[0]["username"], "member")
 
     @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
     def test_ttm_create_task_returns_serialized_task_payload(self):
-        payload = ttm_create_task(
+        payload = async_to_sync(ttm_create_task)(
             workspace_ref="Engineering",
             project_ref="Backend Platform",
             title="Create from MCP",
@@ -609,7 +610,7 @@ class AgentMCPServerTests(TestCase):
 
     @patch.dict("os.environ", {"TTM_AGENT_DEFAULT_ACTOR": "owner"}, clear=False)
     def test_ttm_apply_request_supports_preview(self):
-        payload = ttm_apply_request(
+        payload = async_to_sync(ttm_apply_request)(
             request_text=(
                 "action: create_task\n"
                 "workspace: Engineering\n"

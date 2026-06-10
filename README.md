@@ -10,34 +10,35 @@
 
 Team Task Manager (TTM) is a backend-first Django SaaS project for team workspaces, projects, tasks, comments, and audit activity.
 
-The project is intentionally built around service-oriented domain logic, selector-based reads, and centralized permission helpers instead of fat views or serializers.
+The project is intentionally built around service-oriented domain logic, selector-based reads, and centralized permission helpers instead of fat models, views, or serializers.
 
-## Stack
+## Overview
 
-- Python 3.13
-- Django 5.1
-- Django REST Framework
-- Simple JWT
-- PostgreSQL via `DATABASE_URL`
-- Render-friendly static handling with WhiteNoise
+TTM models a workspace-driven collaboration flow:
 
-## Screenshots
+- users join workspaces through memberships and invitations
+- workspaces contain projects
+- projects contain tasks
+- tasks support assignment, status updates, priorities, due dates, and comments
+- important mutations are recorded in an activity log
 
-### Workspaces
+The HTML interface is intentionally minimal and server-rendered. It exists as a lightweight functional surface for the backend, not as a frontend-heavy product.
 
-![Workspace list](docs/screenshots/workspaces.png)
+## Current UI
 
-### Workspace Overview
+The UI is intentionally lightweight, but the project includes a polished server-rendered surface for demo and manual QA flows.
 
-![Workspace detail](docs/screenshots/workspace-detail.png)
+### Dashboard
 
-### Members
+![Dashboard](docs/screenshots/dashboard.png)
+
+### Workspace Members and Invitations
 
 ![Workspace members](docs/screenshots/workspace-members.png)
 
-### Tasks
+### Project Detail
 
-![Task list](docs/screenshots/task-list.png)
+![Project detail](docs/screenshots/project-detail.png)
 
 ### Task Detail
 
@@ -47,36 +48,64 @@ The project is intentionally built around service-oriented domain logic, selecto
 
 ![Swagger UI](docs/screenshots/api-docs.png)
 
+## Current Capabilities
+
+- workspace creation and membership-based access control
+- invitation creation, acceptance, and revocation
+- role management for `owner`, `admin`, and `member`
+- explicit workspace ownership transfer
+- project archiving and unarchiving
+- read-only enforcement for archived projects
+- task creation, editing, assignment, and status changes
+- comment soft delete with permission boundaries
+- activity log for key workspace events
+- JWT-authenticated REST API with Swagger/OpenAPI docs
+- health and readiness endpoints for deployment
+- local Codex automation through management commands and MCP tools
+
+## Stack
+
+- Python 3.13
+- Django 5.1
+- Django REST Framework
+- Simple JWT
+- PostgreSQL via `DATABASE_URL`
+- SQLite fallback for local development when `DATABASE_URL` is unset
+- WhiteNoise for static files
+- Render-ready deployment config
+
 ## Architecture
 
 TTM follows a strict domain architecture:
 
-- `services` handle all state changes and business workflows.
-- `selectors` handle read/query use cases.
-- `core.permissions` contains centralized authorization helpers.
-- views, forms, and serializers stay thin and delegate to services/selectors.
-- multi-model workflows use `transaction.atomic()`.
+- `services` handle state changes and business workflows
+- `selectors` handle read/query use cases
+- `core.permissions` contains centralized authorization rules
+- views, forms, and serializers remain thin
+- multi-step mutations use `transaction.atomic()`
 
 ### Domain apps
 
 - `accounts`: profile model and authentication pages
-- `workspaces`: workspaces, memberships, invitations
-- `projects`: projects inside workspaces
-- `tasks`: tasks, assignment, status changes
+- `workspaces`: workspaces, memberships, invitations, ownership workflows
+- `projects`: projects inside workspaces, archive lifecycle
+- `tasks`: tasks, assignment, status changes, task maintenance workflows
 - `comments`: task comments with soft delete
 - `activity`: append-only workspace activity log
-- `api`: DRF endpoints and JWT authentication
-- `core`: shared permissions, slug utilities, exceptions
+- `api`: DRF endpoints and JWT auth
+- `core`: shared permissions, slugs, exceptions, health checks, agent automation, MCP server
 
 ## Project Structure
 
 ```text
 team_task_manager/
+|-- .github/
 |-- accounts/
 |-- activity/
 |-- api/
 |-- comments/
 |-- core/
+|-- docs/
 |-- projects/
 |-- tasks/
 |-- team_task_manager/
@@ -86,34 +115,27 @@ team_task_manager/
 
 Important files:
 
-- `team_task_manager/settings.py`: project configuration, `DATABASE_URL`, DRF, static/media
-- `core/permissions.py`: shared permission checks
+- `team_task_manager/settings.py`: Django settings, `DATABASE_URL`, DRF, static handling
+- `team_task_manager/urls.py`: HTML, API, docs, health, and readiness routes
+- `core/permissions.py`: centralized permission checks
 - `core/slugs.py`: immutable slug generation helpers
-- `workspaces/services.py`: workspace ownership and invitation workflows
-- `projects/services.py`: project creation and archive workflows
-- `tasks/services.py`: task creation, assignment, status change workflows
-- `comments/services.py`: comment create and soft delete workflows
+- `core/health.py`: readiness and liveness checks
+- `core/agent.py`: local automation workflows for Codex-style agents
+- `core/mcp_server.py`: native MCP server for Codex
+- `workspaces/services.py`: invitation, membership, and ownership workflows
+- `projects/services.py`: project create/archive/unarchive workflows
+- `tasks/services.py`: task creation, update, assignment, status, and archived-project guards
+- `comments/services.py`: comment create/delete workflows with soft delete behavior
 - `activity/services.py`: append-only activity writer
 - `api/serializers.py`: thin serializers delegating writes to services
-- `api/views.py`: DRF endpoints and workspace activity API
+- `api/views.py`: DRF endpoints reusing the same domain logic as HTML flows
 
 ## Where Domain Logic Lives
 
-- Write logic lives in app services such as `workspaces/services.py`, `projects/services.py`, `tasks/services.py`, and `comments/services.py`.
-- Read logic lives in app selectors such as `workspaces/selectors.py`, `projects/selectors.py`, `tasks/selectors.py`, `comments/selectors.py`, and `activity/selectors.py`.
-- Permission rules live in `core/permissions.py`.
-- HTML views and DRF serializers call those layers instead of implementing business rules directly.
-
-## Architecture Decisions
-
-- The project uses the default Django `User` model to keep authentication standard and avoid unnecessary custom auth complexity.
-- Business workflows live in app-level services so HTML views and DRF endpoints reuse the same write logic.
-- Read access is implemented through selectors scoped by membership to keep multi-tenant filtering explicit and testable.
-- Authorization rules are centralized in `core.permissions` so access decisions are not reimplemented across views and serializers.
-- Slugs are immutable after creation and enforced by scoped unique constraints at the database layer.
-- `ActivityLog` is append-only and written only from services to keep audit history consistent without introducing an event bus.
-- Comments use soft delete semantics in the UI and API while preserving domain-level permission checks around deletion.
-- Archived projects are read-only for task and comment mutations while remaining visible to workspace members.
+- write logic lives in app services such as `workspaces/services.py`, `projects/services.py`, `tasks/services.py`, and `comments/services.py`
+- read logic lives in selectors such as `workspaces/selectors.py`, `projects/selectors.py`, `tasks/selectors.py`, `comments/selectors.py`, and `activity/selectors.py`
+- permission rules live in `core/permissions.py`
+- HTML views and DRF serializers call those layers instead of implementing business logic inline
 
 ## Quick Start
 
@@ -130,8 +152,10 @@ pip install -r requirements.txt
 copy .env.example .env
 ```
 
-4. Update `DATABASE_URL` and `DJANGO_SECRET_KEY` in `.env`.
-   `.env` is loaded automatically by Django settings, so local commands use the configured database without manual environment export.
+4. Update `.env` values as needed.
+
+The project reads `.env` automatically. If `DATABASE_URL` is omitted, Django falls back to local SQLite at `db.sqlite3`.
+
 5. Run migrations:
 
 ```bash
@@ -144,63 +168,15 @@ python manage.py migrate
 python manage.py createsuperuser
 ```
 
-7. Start the server:
+7. Start the local server:
 
 ```bash
 python manage.py runserver
 ```
 
-## Docker Deployment
+## Database Configuration
 
-The repository includes a production-oriented Docker setup for deploying the Django app against an external PostgreSQL database.
-
-Files:
-
-- `Dockerfile`
-- `docker-compose.yml`
-- `docker/entrypoint.sh`
-
-Recommended `.env` values for Docker on a VPS:
-
-```env
-DEBUG=False
-DJANGO_SECRET_KEY=change-me
-DATABASE_URL=postgresql://myuser:password@db-host:5432/myproject
-DB_SSL_REQUIRE=False
-ALLOWED_HOSTS=your-domain.com,server-ip
-CSRF_TRUSTED_ORIGINS=https://your-domain.com
-WEB_CONCURRENCY=3
-```
-
-Build and start:
-
-```bash
-docker compose up --build -d
-```
-
-The container startup flow runs:
-
-1. `python manage.py migrate --noinput`
-2. `python manage.py collectstatic --noinput`
-3. `gunicorn` with a Uvicorn worker on port `8000`
-
-Stop the service:
-
-```bash
-docker compose down
-```
-
-View logs:
-
-```bash
-docker compose logs -f web
-```
-
-For VPS deployment, place Nginx in front of the container and proxy requests to `127.0.0.1:8000`.
-
-## PostgreSQL Setup
-
-TTM reads the database connection from `DATABASE_URL`.
+TTM reads the main database connection from `DATABASE_URL`.
 
 Example local PostgreSQL value:
 
@@ -209,44 +185,72 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/team_task_manager
 DB_SSL_REQUIRE=False
 ```
 
-For Render, configure `DATABASE_URL`, `DJANGO_SECRET_KEY`, `DEBUG=False`, and `ALLOWED_HOSTS`.
-For external Render Postgres connections, set `DB_SSL_REQUIRE=True` if your URL does not already include SSL parameters.
+If `DATABASE_URL` is not set, local commands and Codex automation use:
 
-## Render Deployment
+```text
+sqlite:///db.sqlite3
+```
+
+That fallback is convenient for development, but production should always use PostgreSQL.
+
+## Deployment
+
+### Render
 
 The repository includes `render.yaml` and `build.sh` for Render deployment.
 
-Deployment behavior on Render:
+Render behavior:
 
-- dependencies are installed in `build.sh`
-- static files are collected during build
-- database migrations run in `preDeployCommand`
-- the app starts with Gunicorn and a Uvicorn worker
-- `DEBUG` defaults to `False` when the `RENDER` environment variable is present
-- `ALLOWED_HOSTS` and `CSRF_TRUSTED_ORIGINS` automatically include `RENDER_EXTERNAL_HOSTNAME`
-- secure proxy, HTTPS redirect, secure cookies, and HSTS are enabled on Render
-- Render health checks use `/healthz/`, while `/readyz/` is available for deeper dependency checks
+- installs dependencies in `build.sh`
+- collects static files during build
+- runs migrations in `preDeployCommand`
+- starts Gunicorn with a Uvicorn worker
+- uses `/healthz/` for health checks
+- exposes `/readyz/` for deeper readiness validation
+- auto-configures secure proxy and HTTPS-related settings when `RENDER` is present
 
 Blueprint flow:
 
 1. Push the repository with `render.yaml`.
-2. In Render, create a new Blueprint from the repository.
-3. Render will provision:
-   - web service `team-task-manager`
-   - PostgreSQL database `team-task-manager-db`
-4. After the first deploy, create an admin user from the Render Shell:
+2. Create a new Blueprint in Render.
+3. Render provisions the web service and PostgreSQL database.
+4. Create an admin user from the Render shell:
 
 ```bash
 python manage.py createsuperuser
 ```
 
-Manual Render service values:
+Manual Render values:
 
 - Build Command: `./build.sh`
 - Pre-Deploy Command: `python manage.py migrate --no-input`
 - Start Command: `python -m gunicorn team_task_manager.asgi:application -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT`
 
-## HTML Pages
+### Docker
+
+The repository also includes a production-oriented Docker setup:
+
+- `Dockerfile`
+- `docker-compose.yml`
+- `docker/entrypoint.sh`
+
+Typical startup flow:
+
+1. `python manage.py migrate --noinput`
+2. `python manage.py collectstatic --noinput`
+3. `gunicorn` on port `8000`
+
+Example:
+
+```bash
+docker compose up --build -d
+docker compose logs -f web
+docker compose down
+```
+
+## HTML Routes
+
+Key server-rendered routes:
 
 - `/`
 - `/healthz/`
@@ -257,9 +261,13 @@ Manual Render service values:
 - `/workspaces/create/`
 - `/workspaces/<slug>/`
 - `/workspaces/<slug>/members/`
+- `/workspaces/<slug>/members/<membership_id>/role/`
+- `/workspaces/<slug>/members/<membership_id>/remove/`
+- `/workspaces/<slug>/invitations/<invitation_id>/revoke/`
+- `/workspaces/<slug>/transfer-ownership/`
 - `/workspaces/<slug>/activity/`
 - `/invitations/<token>/accept/`
-- `/workspaces/<slug>/projects/`
+- `/workspaces/<workspace_slug>/projects/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/archive/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/unarchive/`
@@ -267,47 +275,60 @@ Manual Render service values:
 - `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
 - `/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/edit/`
 
-## API Endpoints
+## API
 
-Authentication:
+### Authentication
 
 - `POST /api/auth/token/`
 - `POST /api/auth/token/refresh/`
 
-Resources:
+### Workspaces and membership
 
 - `GET, POST /api/workspaces/`
 - `GET /api/workspaces/<slug>/`
-- `GET, POST /api/projects/`
+- `GET /api/workspaces/<slug>/activity/`
 - `GET, POST /api/workspaces/<slug>/invitations/`
+- `DELETE /api/workspaces/<slug>/invitations/<invitation_id>/`
+- `GET, PATCH, DELETE /api/workspaces/<slug>/memberships/<membership_id>/`
+- `POST /api/workspaces/<slug>/transfer-ownership/`
 - `POST /api/invitations/<token>/accept/`
+
+### Projects
+
+- `GET, POST /api/projects/`
 - `GET /api/workspaces/<workspace_slug>/projects/<project_slug>/`
 - `POST /api/workspaces/<workspace_slug>/projects/<project_slug>/archive/`
 - `POST /api/workspaces/<workspace_slug>/projects/<project_slug>/unarchive/`
+
+### Tasks and comments
+
 - `GET, POST /api/tasks/`
 - `GET, PATCH /api/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
 - `GET, POST /api/comments/`
 - `DELETE /api/comments/<id>/`
+
+### Activity
+
 - `GET /api/activity/`
 - `GET /api/workspaces/<slug>/activity/`
 
-Useful query params:
+### Useful query params
 
 - `/api/projects/?workspace=<workspace-slug>`
+- `/api/projects/?ordering=created_at`
 - `/api/tasks/?project=<project-slug>`
 - `/api/tasks/?status=todo`
 - `/api/tasks/?assignee=<user-id>`
 - `/api/tasks/?ordering=-created_at`
-- `/api/projects/?ordering=created_at`
-- `/api/activity/?ordering=-created_at`
 - `/api/comments/?task=<task-slug>`
+- `/api/activity/?ordering=-created_at`
 
-Interactive API docs:
+### API docs
 
-- [Swagger UI](/api/docs/)
+- Swagger UI: `/api/docs/`
 - OpenAPI schema: `/api/schema/`
 
-API examples:
+Example:
 
 ```bash
 curl -X POST http://127.0.0.1:8000/api/auth/token/ \
@@ -315,36 +336,25 @@ curl -X POST http://127.0.0.1:8000/api/auth/token/ \
   -d "{\"username\":\"owner\",\"password\":\"secret123\"}"
 ```
 
-```bash
-curl http://127.0.0.1:8000/api/tasks/?project=backend\&status=todo\&ordering=-created_at \
-  -H "Authorization: Bearer <access-token>"
-```
-
-```bash
-curl -X PATCH http://127.0.0.1:8000/api/workspaces/engineering/projects/backend/tasks/ship-api/ \
-  -H "Authorization: Bearer <access-token>" \
-  -H "Content-Type: application/json" \
-  -d "{\"description\":\"Updated from API\"}"
-```
-
 ## Agent Automation
 
-TTM also exposes a local command-driven automation layer for Codex-style agents.
-These commands call Django domain services directly, so they reuse the same
-permissions, slug rules, and activity logging as the HTML and API layers.
+TTM exposes a local command-driven automation layer for Codex-style agents.
+
+These commands call Django services directly, so they reuse the same permissions, slug rules, and activity logging as the HTML and API layers.
 
 Useful commands:
 
 ```bash
 python manage.py agent_list_workspaces --actor owner
 python manage.py agent_list_projects --actor owner --workspace engineering
+python manage.py agent_list_members --actor owner --workspace engineering
 python manage.py agent_list_tasks --actor owner --workspace engineering --project backend
 python manage.py agent_create_project --actor owner --workspace engineering --name "Ops Console"
 python manage.py agent_create_task --actor owner --workspace engineering --project backend --title "Add audit export"
 python manage.py agent_update_task --actor owner --workspace engineering --project backend --task ship-api --status done
 ```
 
-There is also a higher-level capture command for structured requests:
+Higher-level request capture:
 
 ```bash
 python manage.py agent_capture_request --actor owner --request "action: create_task
@@ -356,7 +366,7 @@ priority: high
 assignee: alice"
 ```
 
-Use `--preview` to validate and resolve names before creating anything:
+Preview before writing:
 
 ```bash
 python manage.py agent_capture_request --actor owner --preview --request "action: create_task
@@ -365,102 +375,17 @@ project: Backend
 title: Preview task only"
 ```
 
-Batch requests are supported with `---` separators:
+Batch requests are supported with `---` separators, and file-based workflows are available through `agent_apply_file`.
 
-```bash
-python manage.py agent_capture_request --actor owner --request "action: create_project
-workspace: Engineering
-name: Agent Extensions
----
-action: create_task
-workspace: Engineering
-project: Backend
-title: Add batch automation support"
-```
+Markdown checklists also work for bulk task creation and maintenance, including `Task Action: update_task`.
 
-You can also keep the structured request in a local file and let Codex apply it directly:
+Structured requests can also use Russian keys and values.
 
-```bash
-python manage.py agent_apply_file --actor owner --file .\docs\agent-brief.txt --preview
-python manage.py agent_apply_file --actor owner --file .\docs\agent-brief.txt
-```
+## Codex MCP Mode
 
-Recommended file format:
+The repo also exposes a native MCP server at [`core/mcp_server.py`](core/mcp_server.py).
 
-```text
-action: create_project
-workspace: Engineering
-name: Agent Extensions
----
-action: create_task
-workspace: Engineering
-project: Backend
-title: Add batch automation support
-priority: high
-assignee: alice
-```
-
-Markdown checklists also work when they include workspace/project context:
-
-```text
-# Workspace: Engineering
-# Project: Agent Extensions
-Action: create_project
-Description: Follow-up work captured from a planning note
-
-- [ ] Add parser support
-  priority: high
-  assignee: alice
-- [ ] Add docs updates
-```
-
-They can also maintain existing tasks when you add `Task Action: update_task` and
-optionally point each checklist item at a concrete existing task:
-
-```text
-Workspace: Engineering
-Project: Backend
-Task Action: update_task
-
-- [x] Ship markdown parser
-  task: ship-markdown-parser
-- [ ] Refresh docs title
-  task: existing-docs-task
-  title: Refresh docs title
-```
-
-Structured requests can also use Russian keys and values, for example:
-
-```text
-действие: создать задачу
-воркспейс: Engineering
-проект: Backend
-название: Добавить русскоязычный парсер
-описание: Проверить русские алиасы
-приоритет: высокий
-исполнитель: alice
-статус: в работе
-```
-
-Recommended usage for future Codex chats:
-
-- resolve the actor once with `--actor`
-- list accessible workspaces and projects through the agent commands
-- use `agent_capture_request --preview` before applying ambiguous or high-impact changes
-- use `agent_apply_file` when the chat already has a local brief, markdown note, or generated task plan
-- batch related creations in one call when they belong to the same user request
-- create the project or task through management commands instead of calling REST endpoints
-- use `agent_update_task` or `action: update_task` / `action: close_task` to keep existing work items current
-- prefer the structured `action/workspace/project/title/...` format when using `agent_capture_request`
-- use markdown checklists when a planning note already exists and the agent should turn it into concrete tasks
-- use `Task Action: update_task` in markdown briefs when the note should update or close existing tasks instead of creating new ones
-- feel free to write structured keys in Russian when that is more natural for the chat flow
-
-## Codex Plugin Mode
-
-The repo now also exposes a native MCP server for Codex at [core/mcp_server.py](C:/Team_Task_Manager/core/mcp_server.py).
-
-That server wraps the same Django domain services used by HTML, API, and management commands, so future Codex chats can call TTM as local tools instead of driving the browser or composing raw API requests.
+That server wraps the same Django domain services used by HTML, API, and management commands, so Codex can operate on TTM through local tools instead of browser automation.
 
 Available MCP tools:
 
@@ -476,17 +401,17 @@ Available MCP tools:
 - `ttm_apply_request`
 - `ttm_apply_file`
 
-The MCP server supports a default actor via `TTM_AGENT_DEFAULT_ACTOR`, so a new Codex chat can often create and maintain work items without passing an actor on every tool call.
+The MCP server supports `TTM_AGENT_DEFAULT_ACTOR`, which makes repeated Codex-driven operations simpler in local workflows.
 
-## Testing
+## Testing and Quality Checks
 
-Run the service and API tests with:
+Full test suite:
 
 ```bash
-python manage.py test workspaces tasks comments api
+python manage.py test
 ```
 
-Useful operational checks:
+Useful checks:
 
 ```bash
 python manage.py check
@@ -494,16 +419,18 @@ python manage.py makemigrations --check --dry-run
 python -m ruff check .
 ```
 
-Health endpoints:
+Operational endpoints:
 
 - `GET /healthz/`: liveness probe for the Django process
 - `GET /readyz/`: readiness probe that verifies database access and unapplied migrations
 
 ## CI
 
-GitHub Actions runs on pushes to `master` and on pull requests. The workflow:
+GitHub Actions runs on pushes to `master` and on pull requests.
 
-- installs project dependencies on Python 3.13
+The workflow:
+
+- installs dependencies on Python 3.13
 - runs `ruff`
 - runs `python manage.py check`
 - verifies migrations are in sync

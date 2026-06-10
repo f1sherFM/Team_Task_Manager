@@ -3,6 +3,7 @@ from django.utils import timezone
 
 from core.exceptions import DomainError
 from core.permissions import (
+    can_delete_workspace,
     can_manage_invitations,
     can_manage_membership,
     can_transfer_workspace_ownership,
@@ -150,6 +151,14 @@ def remove_membership(*, membership: Membership, actor) -> None:
         raise DomainError("Owner membership cannot be removed.")
 
     membership.delete()
+
+
+@transaction.atomic
+def delete_workspace(*, workspace: Workspace, actor) -> None:
+    if not can_delete_workspace(workspace=workspace, user=actor):
+        raise DomainError("Workspace deletion requires the current workspace owner.")
+
+    workspace.delete()
 
 
 def ensure_workspace_access(*, membership: Membership | None) -> Membership:

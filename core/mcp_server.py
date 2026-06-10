@@ -3,6 +3,7 @@ import sys
 from pathlib import Path
 
 import django
+from asgiref.sync import sync_to_async
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
 
@@ -53,6 +54,13 @@ def _domain_error(exc: DomainError) -> ValueError:
     return ValueError(str(exc))
 
 
+async def run_agent_sync(callable_obj, /, **kwargs):
+    try:
+        return await sync_to_async(callable_obj, thread_sensitive=True)(**kwargs)
+    except DomainError as exc:
+        raise _domain_error(exc) from exc
+
+
 @server.tool(
     name="ttm_get_context",
     description=(
@@ -71,79 +79,71 @@ def ttm_get_context() -> dict:
     name="ttm_list_workspaces",
     description="List workspaces the actor can access.",
 )
-def ttm_list_workspaces(actor_ref: str | None = None) -> list[dict]:
-    try:
-        return list_workspaces_for_agent(actor_ref=resolve_actor_ref(actor_ref))
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+async def ttm_list_workspaces(actor_ref: str | None = None) -> list[dict]:
+    return await run_agent_sync(
+        list_workspaces_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+    )
 
 
 @server.tool(
     name="ttm_list_projects",
     description="List projects in a workspace the actor can access.",
 )
-def ttm_list_projects(workspace_ref: str, actor_ref: str | None = None) -> list[dict]:
-    try:
-        return list_projects_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+async def ttm_list_projects(workspace_ref: str, actor_ref: str | None = None) -> list[dict]:
+    return await run_agent_sync(
+        list_projects_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+    )
 
 
 @server.tool(
     name="ttm_list_members",
     description="List members in a workspace so Codex can choose valid assignees and admins.",
 )
-def ttm_list_members(workspace_ref: str, actor_ref: str | None = None) -> list[dict]:
-    try:
-        return list_members_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+async def ttm_list_members(workspace_ref: str, actor_ref: str | None = None) -> list[dict]:
+    return await run_agent_sync(
+        list_members_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+    )
 
 
 @server.tool(
     name="ttm_list_tasks",
     description="List tasks in a project, including assignee, status, and priority.",
 )
-def ttm_list_tasks(
+async def ttm_list_tasks(
     workspace_ref: str,
     project_ref: str,
     actor_ref: str | None = None,
 ) -> list[dict]:
-    try:
-        return list_tasks_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-            project_ref=project_ref,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    return await run_agent_sync(
+        list_tasks_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+        project_ref=project_ref,
+    )
 
 
 @server.tool(
     name="ttm_create_project",
     description="Create a project inside a workspace using the project's Django services.",
 )
-def ttm_create_project(
+async def ttm_create_project(
     workspace_ref: str,
     name: str,
     description: str = "",
     actor_ref: str | None = None,
 ) -> dict:
-    try:
-        project = create_project_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-            name=name,
-            description=description,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    project = await run_agent_sync(
+        create_project_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+        name=name,
+        description=description,
+    )
     return {
         "workspace": project.workspace.slug,
         "project": project.slug,
@@ -158,7 +158,7 @@ def ttm_create_project(
         "valid assignee."
     ),
 )
-def ttm_create_task(
+async def ttm_create_task(
     workspace_ref: str,
     project_ref: str,
     title: str,
@@ -169,20 +169,18 @@ def ttm_create_task(
     status: str | None = None,
     actor_ref: str | None = None,
 ) -> dict:
-    try:
-        task = create_task_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-            project_ref=project_ref,
-            title=title,
-            description=description,
-            priority=priority,
-            due_date=due_date,
-            assignee_ref=assignee_ref,
-            status=status,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    task = await run_agent_sync(
+        create_task_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+        project_ref=project_ref,
+        title=title,
+        description=description,
+        priority=priority,
+        due_date=due_date,
+        assignee_ref=assignee_ref,
+        status=status,
+    )
     return {
         "workspace": task.project.workspace.slug,
         "project": task.project.slug,
@@ -201,7 +199,7 @@ def ttm_create_task(
         "clear the assignee."
     ),
 )
-def ttm_update_task(
+async def ttm_update_task(
     workspace_ref: str,
     project_ref: str,
     task_ref: str,
@@ -213,21 +211,19 @@ def ttm_update_task(
     status: str | None = None,
     actor_ref: str | None = None,
 ) -> dict:
-    try:
-        task = update_task_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-            project_ref=project_ref,
-            task_ref=task_ref,
-            title=title,
-            description=description,
-            priority=priority,
-            due_date=due_date,
-            assignee_ref=assignee_ref,
-            status=status,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    task = await run_agent_sync(
+        update_task_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+        project_ref=project_ref,
+        task_ref=task_ref,
+        title=title,
+        description=description,
+        priority=priority,
+        due_date=due_date,
+        assignee_ref=assignee_ref,
+        status=status,
+    )
     return {
         "workspace": task.project.workspace.slug,
         "project": task.project.slug,
@@ -243,21 +239,19 @@ def ttm_update_task(
     name="ttm_close_task",
     description="Mark a task as done.",
 )
-def ttm_close_task(
+async def ttm_close_task(
     workspace_ref: str,
     project_ref: str,
     task_ref: str,
     actor_ref: str | None = None,
 ) -> dict:
-    try:
-        task = close_task_for_agent(
-            actor_ref=resolve_actor_ref(actor_ref),
-            workspace_ref=workspace_ref,
-            project_ref=project_ref,
-            task_ref=task_ref,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    task = await run_agent_sync(
+        close_task_for_agent,
+        actor_ref=resolve_actor_ref(actor_ref),
+        workspace_ref=workspace_ref,
+        project_ref=project_ref,
+        task_ref=task_ref,
+    )
     return {
         "workspace": task.project.workspace.slug,
         "project": task.project.slug,
@@ -274,38 +268,34 @@ def ttm_close_task(
         "through the TTM agent layer."
     ),
 )
-def ttm_apply_request(
+async def ttm_apply_request(
     request_text: str,
     preview: bool = False,
     actor_ref: str | None = None,
 ) -> list[dict]:
-    try:
-        return execute_agent_batch_request(
-            actor_ref=resolve_actor_ref(actor_ref),
-            request_text=request_text,
-            preview=preview,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    return await run_agent_sync(
+        execute_agent_batch_request,
+        actor_ref=resolve_actor_ref(actor_ref),
+        request_text=request_text,
+        preview=preview,
+    )
 
 
 @server.tool(
     name="ttm_apply_file",
     description="Apply a local brief file through the TTM agent layer.",
 )
-def ttm_apply_file(
+async def ttm_apply_file(
     file_path: str,
     preview: bool = False,
     actor_ref: str | None = None,
 ) -> list[dict]:
-    try:
-        return execute_agent_file_request(
-            actor_ref=resolve_actor_ref(actor_ref),
-            file_path=file_path,
-            preview=preview,
-        )
-    except DomainError as exc:
-        raise _domain_error(exc) from exc
+    return await run_agent_sync(
+        execute_agent_file_request,
+        actor_ref=resolve_actor_ref(actor_ref),
+        file_path=file_path,
+        preview=preview,
+    )
 
 
 if __name__ == "__main__":

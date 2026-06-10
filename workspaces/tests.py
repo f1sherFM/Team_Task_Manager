@@ -9,6 +9,7 @@ from workspaces.services import (
     change_membership_role,
     create_invitation,
     create_workspace,
+    delete_workspace,
     remove_membership,
     revoke_invitation,
     transfer_workspace_ownership,
@@ -121,6 +122,23 @@ class WorkspaceServiceTests(TestCase):
                 new_owner_membership=target_membership,
                 actor=self.admin,
             )
+
+    def test_owner_can_delete_workspace(self):
+        workspace = create_workspace(owner=self.owner, name="Core Team")
+
+        delete_workspace(workspace=workspace, actor=self.owner)
+
+        self.assertFalse(Membership.objects.filter(workspace_id=workspace.id).exists())
+        self.assertFalse(
+            workspace.__class__.objects.filter(id=workspace.id).exists()
+        )
+
+    def test_admin_cannot_delete_workspace(self):
+        workspace = create_workspace(owner=self.owner, name="Core Team")
+        Membership.objects.create(workspace=workspace, user=self.admin, role=MembershipRole.ADMIN)
+
+        with self.assertRaises(DomainError):
+            delete_workspace(workspace=workspace, actor=self.admin)
 
     def test_create_invitation_rejects_existing_member(self):
         workspace = create_workspace(owner=self.owner, name="Core Team")

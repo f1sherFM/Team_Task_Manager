@@ -44,6 +44,10 @@ def can_transfer_workspace_ownership(*, workspace, user) -> bool:
     return has_membership_role(membership, MembershipRole.OWNER)
 
 
+def can_delete_workspace(*, workspace, user) -> bool:
+    return can_transfer_workspace_ownership(workspace=workspace, user=user)
+
+
 def can_manage_membership(*, membership, user) -> bool:
     from workspaces.models import MembershipRole
 
