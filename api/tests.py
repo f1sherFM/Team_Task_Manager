@@ -112,6 +112,20 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["results"][0]["text"], "[deleted]")
 
+    def test_comments_api_supports_author_and_deleted_filters(self):
+        self.client.force_authenticate(self.member)
+        second_comment = add_comment(task=self.task, author=self.owner, text="Owner note")
+        self.client.delete(f"/api/comments/{self.comment.id}/")
+
+        response = self.client.get(
+            "/api/comments/",
+            {"author": self.owner.id, "is_deleted": "false", "q": "owner"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], second_comment.id)
+
     def test_project_create_api_rejects_member_without_admin_role(self):
         self.client.force_authenticate(self.member)
 
@@ -178,6 +192,32 @@ class ApiPermissionTests(TestCase):
             returned_slugs.index(older_project.slug),
         )
 
+    def test_projects_api_filters_by_archive_state_and_search(self):
+        self.client.force_authenticate(self.member)
+        archived_project = create_project(
+            workspace=self.workspace,
+            name="Legacy Console",
+            description="Old reporting surface",
+            created_by=self.owner,
+        )
+        active_project = create_project(
+            workspace=self.workspace,
+            name="Analytics Hub",
+            description="Current analytics work",
+            created_by=self.owner,
+        )
+        archive_project(project=archived_project, actor=self.owner)
+
+        response = self.client.get(
+            "/api/projects/",
+            {"workspace": self.workspace.slug, "is_archived": "true", "q": "legacy"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["slug"], archived_project.slug)
+        self.assertNotEqual(response.data["results"][0]["slug"], active_project.slug)
+
     def test_tasks_api_supports_created_at_ordering(self):
         self.client.force_authenticate(self.member)
         older_task = create_task(
@@ -215,6 +255,70 @@ class ApiPermissionTests(TestCase):
             returned_slugs.index(older_task.slug),
         )
 
+    def test_tasks_api_supports_priority_due_date_and_search_filters(self):
+        self.client.force_authenticate(self.member)
+        target_task = create_task(
+            project=self.project,
+            title="Prepare release notes",
+            description="Write the release notes draft",
+            priority="high",
+            due_date=timezone.localdate() + timedelta(days=1),
+            assignee=None,
+            created_by=self.member,
+        )
+        other_task = create_task(
+            project=self.project,
+            title="Refactor filters",
+            description="Background cleanup",
+            priority="low",
+            due_date=timezone.localdate() + timedelta(days=10),
+            assignee=None,
+            created_by=self.member,
+        )
+
+        response = self.client.get(
+            "/api/tasks/",
+            {
+                "workspace": self.workspace.slug,
+                "priority": "high",
+                "due_before": str(timezone.localdate() + timedelta(days=2)),
+                "q": "release",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["slug"], target_task.slug)
+        self.assertNotEqual(response.data["results"][0]["slug"], other_task.slug)
+
+    def test_tasks_api_supports_overdue_filter(self):
+        self.client.force_authenticate(self.member)
+        overdue_task = create_task(
+            project=self.project,
+            title="Overdue task",
+            description="Late work",
+            priority="medium",
+            due_date=timezone.localdate() - timedelta(days=1),
+            assignee=None,
+            created_by=self.member,
+        )
+        current_task = create_task(
+            project=self.project,
+            title="Current task",
+            description="On track",
+            priority="medium",
+            due_date=timezone.localdate() + timedelta(days=2),
+            assignee=None,
+            created_by=self.member,
+        )
+
+        response = self.client.get("/api/tasks/", {"is_overdue": "true"})
+
+        self.assertEqual(response.status_code, 200)
+        slugs = [item["slug"] for item in response.data["results"]]
+        self.assertIn(overdue_task.slug, slugs)
+        self.assertNotIn(current_task.slug, slugs)
+
     def test_activity_api_supports_created_at_ordering(self):
         self.client.force_authenticate(self.member)
         older = log_activity(
@@ -243,6 +347,39 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         actions = [item["action"] for item in response.data["results"]]
         self.assertLess(actions.index("older_event"), actions.index("newer_event"))
+
+    def test_activity_api_supports_actor_action_and_target_filters(self):
+        self.client.force_authenticate(self.member)
+        log_activity(
+            workspace=self.workspace,
+            actor=self.member,
+            action="task_status_changed",
+            target_type="task",
+            target_id="target-1",
+            metadata={},
+        )
+        log_activity(
+            workspace=self.workspace,
+            actor=self.admin,
+            action="project_archived",
+            target_type="project",
+            target_id="target-2",
+            metadata={},
+        )
+
+        response = self.client.get(
+            "/api/activity/",
+            {
+                "workspace": self.workspace.slug,
+                "actor": self.admin.id,
+                "action": "project_archived",
+                "target_type": "project",
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["action"], "project_archived")
 
     def test_tasks_api_filters_by_status(self):
         self.client.force_authenticate(self.member)
@@ -286,6 +423,17 @@ class ApiPermissionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(response.data["results"][0]["slug"], assigned_task.slug)
+
+    def test_tasks_api_rejects_invalid_due_before_filter(self):
+        self.client.force_authenticate(self.member)
+
+        response = self.client.get("/api/tasks/", {"due_before": "11-06-2026"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(
+            response.data["detail"],
+            "Invalid date value for due_before. Use YYYY-MM-DD.",
+        )
 
     def test_task_create_api_returns_validation_error_for_invalid_payload(self):
         self.client.force_authenticate(self.member)

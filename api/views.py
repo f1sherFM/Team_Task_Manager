@@ -5,7 +5,7 @@ from rest_framework.filters import OrderingFilter
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from activity.selectors import get_user_activity, get_workspace_activity
+from activity.selectors import filter_activity_logs, get_user_activity, get_workspace_activity
 from api.permissions import (
     CommentPermission,
     MembershipManagementPermission,
@@ -30,13 +30,14 @@ from api.serializers import (
     WorkspaceOwnershipTransferSerializer,
     WorkspaceSerializer,
 )
-from comments.selectors import get_user_comments
+from comments.selectors import filter_comments, get_user_comments
 from comments.services import soft_delete_comment
 from core.exceptions import DomainError
+from core.selectors import parse_bool_query
 from projects.models import Project
-from projects.selectors import get_workspace_project_by_slug
+from projects.selectors import filter_projects, get_workspace_project_by_slug
 from tasks.models import Task
-from tasks.selectors import get_project_task_by_slug
+from tasks.selectors import filter_tasks, get_project_task_by_slug
 from workspaces.models import Invitation, Membership, Workspace
 from workspaces.selectors import (
     get_invitation_by_token,
@@ -78,10 +79,19 @@ class ProjectViewSet(
         from projects.selectors import get_user_projects
 
         queryset = get_user_projects(self.request.user)
-        workspace_slug = self.request.query_params.get("workspace")
-        if workspace_slug:
-            queryset = queryset.filter(workspace__slug=workspace_slug)
-        return queryset
+        try:
+            return filter_projects(
+                queryset,
+                workspace_slug=self.request.query_params.get("workspace"),
+                created_by_id=self.request.query_params.get("created_by"),
+                is_archived=parse_bool_query(
+                    self.request.query_params.get("is_archived"),
+                    param_name="is_archived",
+                ),
+                search=self.request.query_params.get("q"),
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
 
 
 class TaskViewSet(
@@ -99,16 +109,22 @@ class TaskViewSet(
         from tasks.selectors import get_user_tasks
 
         queryset = get_user_tasks(self.request.user)
-        project_slug = self.request.query_params.get("project")
-        status_value = self.request.query_params.get("status")
-        assignee_id = self.request.query_params.get("assignee")
-        if project_slug:
-            queryset = queryset.filter(project__slug=project_slug)
-        if status_value:
-            queryset = queryset.filter(status=status_value)
-        if assignee_id:
-            queryset = queryset.filter(assignee_id=assignee_id)
-        return queryset
+        try:
+            return filter_tasks(
+                queryset,
+                workspace_slug=self.request.query_params.get("workspace"),
+                project_slug=self.request.query_params.get("project"),
+                status_value=self.request.query_params.get("status"),
+                priority=self.request.query_params.get("priority"),
+                assignee_id=self.request.query_params.get("assignee"),
+                created_by_id=self.request.query_params.get("created_by"),
+                due_before=self.request.query_params.get("due_before"),
+                due_after=self.request.query_params.get("due_after"),
+                is_overdue=self.request.query_params.get("is_overdue"),
+                search=self.request.query_params.get("q"),
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
 
 
 class CommentViewSet(
@@ -122,10 +138,19 @@ class CommentViewSet(
 
     def get_queryset(self):
         queryset = get_user_comments(self.request.user)
-        task_slug = self.request.query_params.get("task")
-        if task_slug:
-            queryset = queryset.filter(task__slug=task_slug)
-        return queryset
+        try:
+            return filter_comments(
+                queryset,
+                task_slug=self.request.query_params.get("task"),
+                author_id=self.request.query_params.get("author"),
+                is_deleted=parse_bool_query(
+                    self.request.query_params.get("is_deleted"),
+                    param_name="is_deleted",
+                ),
+                search=self.request.query_params.get("q"),
+            )
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
 
     def destroy(self, request, *args, **kwargs):
         instance = self.get_object()
@@ -143,7 +168,13 @@ class ActivityViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     ordering_fields = ["created_at"]
 
     def get_queryset(self):
-        return get_user_activity(self.request.user)
+        return filter_activity_logs(
+            get_user_activity(self.request.user),
+            workspace_slug=self.request.query_params.get("workspace"),
+            actor_id=self.request.query_params.get("actor"),
+            action=self.request.query_params.get("action"),
+            target_type=self.request.query_params.get("target_type"),
+        )
 
 
 class WorkspaceActivityAPIView(generics.ListAPIView):
@@ -160,7 +191,12 @@ class WorkspaceActivityAPIView(generics.ListAPIView):
             )
         except Workspace.DoesNotExist as exc:
             raise Http404("Workspace not found.") from exc
-        return get_workspace_activity(workspace)
+        return filter_activity_logs(
+            get_workspace_activity(workspace),
+            actor_id=self.request.query_params.get("actor"),
+            action=self.request.query_params.get("action"),
+            target_type=self.request.query_params.get("target_type"),
+        )
 
 
 class WorkspaceInvitationListCreateAPIView(generics.ListCreateAPIView):

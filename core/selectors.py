@@ -1,5 +1,6 @@
 from django.db.models import Count
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from activity.models import ActivityLog
 from projects.models import Project
@@ -69,3 +70,27 @@ def get_home_dashboard(*, user) -> dict:
         "recent_activity": activity_queryset[:6],
         "pending_invitations": invitation_queryset[:5],
     }
+
+
+def parse_bool_query(value: str | None, *, param_name: str) -> bool | None:
+    if value is None or value == "":
+        return None
+
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        f"Invalid boolean value for {param_name}. Use true/false."
+    )
+
+
+def parse_date_query(value: str | None, *, param_name: str):
+    if value is None or value == "":
+        return None
+
+    parsed = parse_date(value)
+    if parsed is None:
+        raise ValueError(f"Invalid date value for {param_name}. Use YYYY-MM-DD.")
+    return parsed

@@ -365,12 +365,29 @@ Key server-rendered routes:
 ### Useful query params
 
 - `/api/projects/?workspace=<workspace-slug>`
+- `/api/projects/?is_archived=true`
+- `/api/projects/?created_by=<user-id>`
+- `/api/projects/?q=analytics`
 - `/api/projects/?ordering=created_at`
 - `/api/tasks/?project=<project-slug>`
+- `/api/tasks/?workspace=<workspace-slug>`
 - `/api/tasks/?status=todo`
+- `/api/tasks/?priority=high`
 - `/api/tasks/?assignee=<user-id>`
+- `/api/tasks/?created_by=<user-id>`
+- `/api/tasks/?due_before=2026-06-30`
+- `/api/tasks/?due_after=2026-06-01`
+- `/api/tasks/?is_overdue=true`
+- `/api/tasks/?q=release`
 - `/api/tasks/?ordering=-created_at`
 - `/api/comments/?task=<task-slug>`
+- `/api/comments/?author=<user-id>`
+- `/api/comments/?is_deleted=false`
+- `/api/comments/?q=note`
+- `/api/activity/?workspace=<workspace-slug>`
+- `/api/activity/?actor=<user-id>`
+- `/api/activity/?action=task_status_changed`
+- `/api/activity/?target_type=task`
 - `/api/activity/?ordering=-created_at`
 
 ### API docs
