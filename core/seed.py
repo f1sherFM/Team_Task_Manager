@@ -11,15 +11,21 @@ from projects.services import archive_project, create_project
 from tasks.models import Task, TaskPriority, TaskStatus
 from tasks.services import create_task, update_task
 from workspaces.models import Invitation, Membership, MembershipRole, Workspace
-from workspaces.services import create_invitation, create_workspace
+from workspaces.services import create_invitation, create_workspace, delete_workspace
 
 logger = get_ttm_logger("seed")
 User = get_user_model()
 
 DEFAULT_DEMO_PASSWORD = "demo12345"
+DEMO_USER_SPECS = (
+    ("demo_ui", "demo_ui@example.com"),
+    ("ops_admin", "ops_admin@example.com"),
+    ("teammate", "teammate@example.com"),
+)
+DEMO_WORKSPACE_SLUG = "north-star-studio"
 
 
-def seed_demo_data(*, password: str = DEFAULT_DEMO_PASSWORD) -> dict:
+def seed_demo_data(*, password: str = DEFAULT_DEMO_PASSWORD, reset: bool = False) -> dict:
     summary = {
         "users": 0,
         "workspace": 0,
@@ -28,7 +34,10 @@ def seed_demo_data(*, password: str = DEFAULT_DEMO_PASSWORD) -> dict:
         "tasks": 0,
         "comments": 0,
         "invitations": 0,
+        "reset": 0,
     }
+    if reset:
+        reset_demo_data(summary=summary)
     users = ensure_demo_users(password=password, summary=summary)
     workspace = ensure_demo_workspace(users=users, summary=summary)
     ensure_demo_memberships(workspace=workspace, users=users, summary=summary)
@@ -50,14 +59,19 @@ def seed_demo_data(*, password: str = DEFAULT_DEMO_PASSWORD) -> dict:
     }
 
 
+def reset_demo_data(*, summary: dict) -> None:
+    workspace = Workspace.objects.filter(slug=DEMO_WORKSPACE_SLUG).select_related("owner").first()
+    if workspace is not None:
+        delete_workspace(workspace=workspace, actor=workspace.owner)
+
+    usernames = [username for username, _ in DEMO_USER_SPECS]
+    User.objects.filter(username__in=usernames).delete()
+    summary["reset"] = 1
+
+
 def ensure_demo_users(*, password: str, summary: dict) -> dict[str, User]:
     users: dict[str, User] = {}
-    user_specs = (
-        ("demo_ui", "demo_ui@example.com"),
-        ("ops_admin", "ops_admin@example.com"),
-        ("teammate", "teammate@example.com"),
-    )
-    for username, email in user_specs:
+    for username, email in DEMO_USER_SPECS:
         user, created = User.objects.get_or_create(
             username=username,
             defaults={"email": email},
@@ -73,7 +87,7 @@ def ensure_demo_users(*, password: str, summary: dict) -> dict[str, User]:
 
 
 def ensure_demo_workspace(*, users: dict[str, User], summary: dict) -> Workspace:
-    workspace = Workspace.objects.filter(slug="north-star-studio").first()
+    workspace = Workspace.objects.filter(slug=DEMO_WORKSPACE_SLUG).first()
     if workspace is None:
         workspace = create_workspace(owner=users["demo_ui"], name="North Star Studio")
         summary["workspace"] += 1

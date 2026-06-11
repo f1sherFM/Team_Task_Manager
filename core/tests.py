@@ -1,4 +1,5 @@
 import json
+from datetime import timedelta
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
@@ -677,6 +678,26 @@ class SeedAndIntegrityTests(TestCase):
         self.assertEqual(payload["workspace_slug"], "north-star-studio")
         self.assertEqual(payload["password"], "demo12345")
 
+    def test_seed_demo_data_reset_rebuilds_demo_baseline(self):
+        seed_demo_data(password="demo-pass-123")
+        Workspace.objects.filter(slug="north-star-studio").update(name="Broken Demo Workspace")
+
+        payload = seed_demo_data(password="demo-pass-123", reset=True)
+
+        self.assertEqual(payload["reset"], 1)
+        self.assertTrue(Workspace.objects.filter(slug="north-star-studio").exists())
+        self.assertEqual(Workspace.objects.get(slug="north-star-studio").name, "North Star Studio")
+
+    def test_seed_demo_data_command_supports_reset(self):
+        seed_demo_data(password="demo-pass-123")
+        self.stdout = StringIO()
+
+        call_command("seed_demo_data", reset=True, stdout=self.stdout)
+
+        payload = json.loads(self.stdout.getvalue())
+        self.assertEqual(payload["reset"], 1)
+        self.assertEqual(payload["workspace_slug"], "north-star-studio")
+
     def test_integrity_check_passes_for_seeded_data(self):
         seed_demo_data()
 
@@ -714,6 +735,119 @@ class SeedAndIntegrityTests(TestCase):
                 "ops-team has no matching membership."
             ),
             issues,
+        )
+
+    def test_integrity_check_reports_project_creator_violation(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        outsider = self.User.objects.create_user("outsider", email="outsider@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        project = create_project(
+            workspace=workspace,
+            name="Ops Project",
+            description="",
+            created_by=owner,
+        )
+        project.created_by = outsider
+        project.save(update_fields=["created_by"])
+
+        issues = run_integrity_checks()
+
+        self.assertIn(
+            "Project ops-project in workspace ops-team was created by non-member outsider.",
+            issues,
+        )
+
+    def test_integrity_check_reports_task_creator_violation(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        outsider = self.User.objects.create_user("outsider", email="outsider@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        project = create_project(
+            workspace=workspace,
+            name="Ops Project",
+            description="",
+            created_by=owner,
+        )
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=workspace.slug,
+            project_ref=project.slug,
+            title="Integrity target",
+        )
+        task.created_by = outsider
+        task.save(update_fields=["created_by"])
+
+        issues = run_integrity_checks()
+
+        self.assertIn(
+            "Task integrity-target in project ops-project was created by non-member outsider.",
+            issues,
+        )
+
+    def test_integrity_check_reports_comment_author_violation(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        outsider = self.User.objects.create_user("outsider", email="outsider@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        project = create_project(
+            workspace=workspace,
+            name="Ops Project",
+            description="",
+            created_by=owner,
+        )
+        task = create_task_for_agent(
+            actor_ref="owner",
+            workspace_ref=workspace.slug,
+            project_ref=project.slug,
+            title="Integrity target",
+        )
+        task.comments.create(author=outsider, text="outsider comment")
+
+        issues = run_integrity_checks()
+
+        self.assertIn(
+            "Comment 1 on task integrity-target was authored by non-member outsider.",
+            issues,
+        )
+
+    def test_integrity_check_reports_owner_invitation_violation(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        Invitation.objects.create(
+            workspace=workspace,
+            email="owner-invite@example.com",
+            role=MembershipRole.OWNER,
+            invited_by=owner,
+        )
+
+        issues = run_integrity_checks()
+
+        self.assertIn(
+            "illegally grants the owner role.",
+            " ".join(issues),
+        )
+
+    def test_integrity_check_reports_late_accepted_invitation(self):
+        owner = self.User.objects.create_user("owner", email="owner@example.com")
+        member = self.User.objects.create_user("member", email="late@example.com")
+        workspace = create_workspace(owner=owner, name="Ops Team")
+        Membership.objects.create(
+            workspace=workspace,
+            user=member,
+            role=MembershipRole.MEMBER,
+        )
+        invitation = Invitation.objects.create(
+            workspace=workspace,
+            email="late@example.com",
+            role=MembershipRole.MEMBER,
+            invited_by=owner,
+        )
+        invitation.accepted_at = invitation.expires_at + timedelta(seconds=1)
+        invitation.save(update_fields=["accepted_at"])
+
+        issues = run_integrity_checks()
+
+        self.assertIn(
+            "was accepted after it expired.",
+            " ".join(issues),
         )
 
     def test_integrity_command_fails_when_deleted_comment_keeps_text(self):

@@ -110,8 +110,9 @@ jobs:
           pip install -r requirements.txt
       - name: Run coverage
         run: |
-          coverage run --source=accounts,activity,api,comments,core,projects,tasks,workspaces manage.py test
-          coverage report --show-missing
+          coverage erase
+          coverage run --data-file=.coverage --source=accounts,activity,api,comments,core,projects,tasks,workspaces manage.py test
+          coverage report --data-file=.coverage --show-missing --fail-under=85
           coverage xml
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4

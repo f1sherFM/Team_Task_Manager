@@ -8,6 +8,7 @@ for notable implementation milestones.
 ## [Unreleased]
 
 ### Added
+- `coverage_ttm_local.cmd` for local coverage execution with the same floor enforced in CI.
 - Postgres-first local operational tooling with Windows-friendly helper scripts for bootstrap, linting, tests, demo seeding, and integrity checks.
 - `seed_demo_data` management command for deterministic local demo environments.
 - `check_domain_integrity` management command for owner, invitation, task assignment, and deleted-comment invariants.
@@ -29,6 +30,9 @@ for notable implementation milestones.
 - Added a repo-side MCP server for Codex, including native tools for workspace, member, project, and task automation.
 
 ### Changed
+- `seed_demo_data` now supports `--reset` for rebuilding the demo baseline from scratch.
+- Domain integrity checks now validate project/task creators, comment authors, owner-role invitations, and late invitation acceptance.
+- Coverage reporting now enforces an `85%` floor in CI.
 - GitHub Actions CI is now split into `lint`, `django-check`, `tests`, and `coverage` jobs, with PostgreSQL-backed test execution and a coverage artifact.
 - Local bootstrap no longer depends exclusively on the `py` launcher and can fall back to the bundled Codex Python runtime.
 - Workspace ownership rules now prevent assigning the `owner` role after workspace creation.

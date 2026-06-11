@@ -43,6 +43,7 @@ seed_ttm_demo.cmd
 ```bash
 lint_ttm_local.cmd
 test_ttm_local.cmd
+coverage_ttm_local.cmd
 check_ttm_integrity.cmd
 ```
 
@@ -103,6 +104,7 @@ python manage.py check_domain_integrity
 - Prefer small, reviewable commits with clear messages.
 - Do not mutate slugs after object creation.
 - Keep demo data and integrity tooling deterministic so local smoke checks stay trustworthy.
+- Keep the global coverage floor green; CI currently enforces `85%`.
 
 ## Pull Requests
 

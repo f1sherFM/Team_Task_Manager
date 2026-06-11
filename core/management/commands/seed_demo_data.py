@@ -17,10 +17,18 @@ class Command(BaseCommand):
             default=DEFAULT_DEMO_PASSWORD,
             help="Password to assign to the seeded demo users.",
         )
+        parser.add_argument(
+            "--reset",
+            action="store_true",
+            help="Delete existing demo workspace/users before reseeding.",
+        )
 
     def handle(self, *args, **options):
         try:
-            payload = seed_demo_data(password=options["password"])
+            payload = seed_demo_data(
+                password=options["password"],
+                reset=options["reset"],
+            )
         except Exception as exc:  # pragma: no cover - defensive command boundary
             logger.exception("seed_demo_data_failed", extra=context_extra(action="seed_demo_data"))
             raise CommandError(str(exc)) from exc

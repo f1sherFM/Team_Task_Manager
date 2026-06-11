@@ -232,10 +232,15 @@ Windows-friendly helper scripts in the repository root:
 - `start_ttm_local.cmd`: run the site on `127.0.0.1:8000`
 - `test_ttm_local.cmd`: run the Django test suite
 - `lint_ttm_local.cmd`: run `ruff`
+- `coverage_ttm_local.cmd`: run the full test suite with coverage and enforce the local threshold
 - `seed_ttm_demo.cmd`: create or refresh deterministic demo data
 - `check_ttm_integrity.cmd`: run domain integrity checks and return non-zero on failures
 
 `bootstrap_ttm_local.cmd` prefers `py -3.13` when it is healthy and falls back to the bundled Codex Python runtime when the Windows launcher is unavailable or broken.
+
+Useful variants:
+
+- `seed_ttm_demo.cmd --reset`: rebuild demo users and workspace from scratch
 
 ## Deployment
 
@@ -467,7 +472,7 @@ Coverage:
 
 ```bash
 coverage run --source=accounts,activity,api,comments,core,projects,tasks,workspaces manage.py test
-coverage report --show-missing
+coverage report --show-missing --fail-under=85
 ```
 
 Operational endpoints:
@@ -478,6 +483,7 @@ Operational endpoints:
 Operational commands:
 
 - `python manage.py seed_demo_data`
+- `python manage.py seed_demo_data --reset`
 - `python manage.py check_domain_integrity`
 
 ## CI
@@ -490,4 +496,4 @@ The workflow:
 - runs a dedicated `lint` job
 - runs a dedicated `django-check` job with migration drift checks
 - runs PostgreSQL-backed tests
-- publishes a coverage artifact from a separate coverage job
+- enforces `85%` total coverage and publishes a coverage artifact from a separate coverage job
