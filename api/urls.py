@@ -10,6 +10,7 @@ from api.views import (
     ProjectDetailAPIView,
     ProjectUnarchiveAPIView,
     ProjectViewSet,
+    TaskBulkUpdateAPIView,
     TaskDetailAPIView,
     TaskViewSet,
     WorkspaceActivityAPIView,
@@ -80,6 +81,11 @@ urlpatterns = [
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/",
         TaskDetailAPIView.as_view(),
         name="api-task-detail",
+    ),
+    path(
+        "tasks/bulk-update/",
+        TaskBulkUpdateAPIView.as_view(),
+        name="api-task-bulk-update",
     ),
     path("", include(router.urls)),
 ]

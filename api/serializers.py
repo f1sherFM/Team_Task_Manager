@@ -10,7 +10,7 @@ from projects.selectors import get_workspace_project_by_slug
 from projects.services import archive_project, create_project, unarchive_project
 from tasks.models import Task
 from tasks.selectors import get_project_task_by_slug
-from tasks.services import UNSET, create_task, update_task
+from tasks.services import UNSET, bulk_update_tasks, create_task, update_task
 from workspaces.models import Invitation, Membership, Workspace
 from workspaces.selectors import (
     get_invitation_by_token,
@@ -173,6 +173,87 @@ class TaskSerializer(serializers.ModelSerializer):
             )
         except DomainError as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+
+class TaskBulkUpdateSerializer(serializers.Serializer):
+    workspace_slug = serializers.SlugField(write_only=True)
+    project_slug = serializers.SlugField(write_only=True)
+    task_slugs = serializers.ListField(
+        child=serializers.SlugField(),
+        allow_empty=False,
+        write_only=True,
+    )
+    title = serializers.CharField(required=False)
+    description = serializers.CharField(required=False, allow_blank=True)
+    status = serializers.ChoiceField(choices=Task._meta.get_field("status").choices, required=False)
+    priority = serializers.ChoiceField(
+        choices=Task._meta.get_field("priority").choices,
+        required=False,
+    )
+    due_date = serializers.DateField(required=False, allow_null=True)
+    assignee_id = serializers.IntegerField(required=False, allow_null=True)
+    updated_count = serializers.IntegerField(read_only=True)
+    tasks = TaskSerializer(many=True, read_only=True)
+
+    def validate(self, attrs):
+        attrs = super().validate(attrs)
+        mutable_fields = {"title", "description", "status", "priority", "due_date", "assignee_id"}
+        if not any(field in attrs for field in mutable_fields):
+            raise serializers.ValidationError(
+                {"detail": "Provide at least one mutable field for bulk update."}
+            )
+        attrs["task_slugs"] = list(dict.fromkeys(attrs["task_slugs"]))
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        workspace_slug = validated_data.pop("workspace_slug")
+        project_slug = validated_data.pop("project_slug")
+        task_slugs = validated_data.pop("task_slugs")
+        assignee_id = validated_data.pop("assignee_id", UNSET)
+        try:
+            project = get_workspace_project_by_slug(
+                workspace_slug=workspace_slug,
+                project_slug=project_slug,
+                user=request.user,
+            )
+        except Project.DoesNotExist as exc:
+            raise serializers.ValidationError({"detail": "Project not found."}) from exc
+
+        tasks = list(
+            project.tasks.select_related("project", "project__workspace", "created_by", "assignee")
+            .filter(slug__in=task_slugs)
+            .order_by("created_at")
+        )
+        found_slugs = {task.slug for task in tasks}
+        missing_slugs = [slug for slug in task_slugs if slug not in found_slugs]
+        if missing_slugs:
+            raise serializers.ValidationError(
+                {"task_slugs": [f"Unknown task slugs: {', '.join(missing_slugs)}"]}
+            )
+
+        assignee = UNSET
+        if assignee_id is not UNSET:
+            assignee = User.objects.filter(id=assignee_id).first() if assignee_id else None
+
+        try:
+            updated_tasks = bulk_update_tasks(
+                tasks=tasks,
+                actor=request.user,
+                title=validated_data.get("title", UNSET),
+                description=validated_data.get("description", UNSET),
+                priority=validated_data.get("priority", UNSET),
+                due_date=validated_data.get("due_date", UNSET),
+                assignee=assignee,
+                status=validated_data.get("status", UNSET),
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+        return {
+            "updated_count": len(updated_tasks),
+            "tasks": updated_tasks,
+        }
 
 
 class CommentSerializer(serializers.ModelSerializer):
@@ -384,3 +465,6 @@ class InvitationRevokeSerializer(serializers.Serializer):
         except DomainError as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc
         return invitation
+
+    def to_representation(self, instance):
+        return {"id": instance.id}

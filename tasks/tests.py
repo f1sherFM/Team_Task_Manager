@@ -4,7 +4,7 @@ from django.test import TestCase
 from core.exceptions import DomainError
 from projects.services import archive_project, create_project
 from tasks.models import TaskStatus
-from tasks.services import assign_task, change_task_status, create_task
+from tasks.services import assign_task, bulk_update_tasks, change_task_status, create_task
 from workspaces.models import Membership, MembershipRole
 from workspaces.services import create_workspace
 
@@ -176,3 +176,73 @@ class TaskServiceTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_bulk_assign_and_close_tasks(self):
+        first_task = create_task(
+            project=self.project,
+            title="First task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        second_task = create_task(
+            project=self.project,
+            title="Second task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+        updated_tasks = bulk_update_tasks(
+            tasks=[first_task, second_task],
+            actor=self.admin,
+            assignee=self.other,
+            status=TaskStatus.DONE,
+        )
+
+        self.assertEqual(len(updated_tasks), 2)
+        first_task.refresh_from_db()
+        second_task.refresh_from_db()
+        self.assertEqual(first_task.assignee, self.other)
+        self.assertEqual(second_task.assignee, self.other)
+        self.assertEqual(first_task.status, TaskStatus.DONE)
+        self.assertEqual(second_task.status, TaskStatus.DONE)
+
+    def test_member_bulk_update_rolls_back_when_assignment_is_forbidden(self):
+        first_task = create_task(
+            project=self.project,
+            title="First task",
+            description="Original first",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        second_task = create_task(
+            project=self.project,
+            title="Second task",
+            description="Original second",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+        with self.assertRaises(DomainError):
+            bulk_update_tasks(
+                tasks=[first_task, second_task],
+                actor=self.member,
+                description="Blocked bulk update",
+                assignee=self.other,
+            )
+
+        first_task.refresh_from_db()
+        second_task.refresh_from_db()
+        self.assertEqual(first_task.description, "Original first")
+        self.assertEqual(second_task.description, "Original second")
+        self.assertIsNone(first_task.assignee)
+        self.assertIsNone(second_task.assignee)

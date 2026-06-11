@@ -25,6 +25,7 @@ from api.serializers import (
     MembershipSerializer,
     ProjectArchiveSerializer,
     ProjectSerializer,
+    TaskBulkUpdateSerializer,
     TaskSerializer,
     WorkspaceOwnershipTransferSerializer,
     WorkspaceSerializer,
@@ -353,3 +354,14 @@ class TaskDetailAPIView(generics.RetrieveUpdateAPIView):
             raise Http404("Task not found.") from exc
         self.check_object_permissions(self.request, task)
         return task
+
+
+class TaskBulkUpdateAPIView(generics.CreateAPIView):
+    serializer_class = TaskBulkUpdateSerializer
+    permission_classes = [IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        payload = serializer.save()
+        return Response(serializer.to_representation(payload), status=status.HTTP_200_OK)

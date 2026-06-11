@@ -352,6 +352,7 @@ Key server-rendered routes:
 ### Tasks and comments
 
 - `GET, POST /api/tasks/`
+- `POST /api/tasks/bulk-update/`
 - `GET, PATCH /api/workspaces/<workspace_slug>/projects/<project_slug>/tasks/<task_slug>/`
 - `GET, POST /api/comments/`
 - `DELETE /api/comments/<id>/`
@@ -383,6 +384,21 @@ Example:
 curl -X POST http://127.0.0.1:8000/api/auth/token/ \
   -H "Content-Type: application/json" \
   -d "{\"username\":\"owner\",\"password\":\"secret123\"}"
+```
+
+Bulk task maintenance example:
+
+```bash
+curl -X POST http://127.0.0.1:8000/api/tasks/bulk-update/ \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d "{
+    \"workspace_slug\": \"engineering\",
+    \"project_slug\": \"backend\",
+    \"task_slugs\": [\"ship-api\", \"write-docs\"],
+    \"status\": \"done\",
+    \"assignee_id\": 3
+  }"
 ```
 
 ## Agent Automation

@@ -597,3 +597,84 @@ class ApiPermissionTests(TestCase):
         )
 
         self.assertEqual(response.status_code, 403)
+
+    def test_admin_can_bulk_update_tasks_via_api(self):
+        second_task = create_task(
+            project=self.project,
+            title="Second bulk task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post(
+            "/api/tasks/bulk-update/",
+            {
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slugs": [self.task.slug, second_task.slug],
+                "assignee_id": self.member.id,
+                "status": "done",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["updated_count"], 2)
+        self.task.refresh_from_db()
+        second_task.refresh_from_db()
+        self.assertEqual(self.task.assignee, self.member)
+        self.assertEqual(second_task.assignee, self.member)
+        self.assertEqual(self.task.status, "done")
+        self.assertEqual(second_task.status, "done")
+
+    def test_member_bulk_update_rejects_assignment_via_api(self):
+        second_task = create_task(
+            project=self.project,
+            title="Second bulk task",
+            description="Original second",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        self.client.force_authenticate(self.member)
+
+        response = self.client.post(
+            "/api/tasks/bulk-update/",
+            {
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slugs": [self.task.slug, second_task.slug],
+                "description": "Blocked bulk update",
+                "assignee_id": self.admin.id,
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["detail"], "Only workspace admins can assign tasks.")
+        self.task.refresh_from_db()
+        second_task.refresh_from_db()
+        self.assertEqual(self.task.description, "")
+        self.assertEqual(second_task.description, "Original second")
+
+    def test_bulk_update_api_rejects_unknown_task_slug(self):
+        self.client.force_authenticate(self.admin)
+
+        response = self.client.post(
+            "/api/tasks/bulk-update/",
+            {
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slugs": [self.task.slug, "missing-task"],
+                "status": "done",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("task_slugs", response.data)

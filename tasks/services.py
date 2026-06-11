@@ -141,6 +141,42 @@ def update_task(
     return task
 
 
+@transaction.atomic
+def bulk_update_tasks(
+    *,
+    tasks: list[Task],
+    actor,
+    title=UNSET,
+    description=UNSET,
+    priority=UNSET,
+    due_date=UNSET,
+    assignee=UNSET,
+    status=UNSET,
+) -> list[Task]:
+    if not tasks:
+        raise DomainError("At least one task is required for bulk update.")
+
+    project_id = tasks[0].project_id
+    if any(task.project_id != project_id for task in tasks):
+        raise DomainError("Bulk task updates must target a single project.")
+
+    updated_tasks: list[Task] = []
+    for task in tasks:
+        updated_tasks.append(
+            update_task(
+                task=task,
+                actor=actor,
+                title=title,
+                description=description,
+                priority=priority,
+                due_date=due_date,
+                assignee=assignee,
+                status=status,
+            )
+        )
+    return updated_tasks
+
+
 def update_task_details(
     *,
     task: Task,
