@@ -1,4 +1,5 @@
 import json
+import tempfile
 from datetime import timedelta
 from io import StringIO
 from pathlib import Path
@@ -85,7 +86,7 @@ class ReadinessStatusTests(SimpleTestCase):
 class AgentAutomationTests(TestCase):
     def setUp(self):
         self.stdout = StringIO()
-        self.test_request_file = Path("C:/Team_Task_Manager/tmp_agent_request.txt")
+        self.test_request_file = Path(tempfile.gettempdir()) / "ttm_tmp_agent_request.txt"
         self.User = get_user_model()
         self.owner = self.User.objects.create_user(
             username="owner",
@@ -799,12 +800,15 @@ class SeedAndIntegrityTests(TestCase):
             project_ref=project.slug,
             title="Integrity target",
         )
-        task.comments.create(author=outsider, text="outsider comment")
+        comment = task.comments.create(author=outsider, text="outsider comment")
 
         issues = run_integrity_checks()
 
         self.assertIn(
-            "Comment 1 on task integrity-target was authored by non-member outsider.",
+            (
+                f"Comment {comment.id} on task integrity-target "
+                "was authored by non-member outsider."
+            ),
             issues,
         )
 
