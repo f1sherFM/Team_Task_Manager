@@ -57,6 +57,35 @@ class HealthEndpointTests(TestCase):
         self.assertEqual(response.json()["checks"]["database"]["status"], "ok")
         self.assertEqual(response.json()["checks"]["migrations"]["status"], "ok")
 
+    def test_ecosystem_summary_returns_task_metrics_and_recent_items(self):
+        User = get_user_model()
+        owner = User.objects.create_user(username="summary-owner")
+        workspace = create_workspace(owner=owner, name="Summary Workspace")
+        project = create_project(
+            workspace=workspace,
+            name="Summary Project",
+            description="",
+            created_by=owner,
+        )
+        create_task_for_agent(
+            actor_ref="summary-owner",
+            workspace_ref=workspace.slug,
+            project_ref=project.slug,
+            title="Open summary task",
+            priority=TaskPriority.HIGH,
+        )
+
+        response = self.client.get("/ecosystem/summary/")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["service"], "team_task_manager")
+        self.assertEqual(payload["status"], "ok")
+        self.assertIn({"label": "Workspaces", "value": 1}, payload["metrics"])
+        self.assertIn({"label": "Open tasks", "value": 1}, payload["metrics"])
+        self.assertIn({"label": "High priority", "value": 1}, payload["metrics"])
+        self.assertEqual(payload["recent_items"][0]["label"], "Open summary task")
+
 
 class ReadinessStatusTests(SimpleTestCase):
     @patch("core.health.check_migrations")

@@ -30,6 +30,7 @@ from api.serializers import (
     WorkspaceOwnershipTransferSerializer,
     WorkspaceSerializer,
 )
+from comments.models import Comment
 from comments.selectors import filter_comments, get_user_comments
 from comments.services import soft_delete_comment
 from core.exceptions import DomainError
@@ -59,6 +60,7 @@ class WorkspaceViewSet(
     serializer_class = WorkspaceSerializer
     permission_classes = [WorkspacePermission]
     lookup_field = "slug"
+    queryset = Workspace.objects.none()
 
     def get_queryset(self):
         return get_user_workspaces(self.request.user)
@@ -135,6 +137,7 @@ class CommentViewSet(
 ):
     serializer_class = CommentSerializer
     permission_classes = [CommentPermission]
+    queryset = Comment.objects.none()
 
     def get_queryset(self):
         queryset = get_user_comments(self.request.user)

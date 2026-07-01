@@ -257,6 +257,7 @@ Render behavior:
 - uses `/healthz/` for health checks
 - exposes `/readyz/` for deeper readiness validation
 - auto-configures secure proxy and HTTPS-related settings when `RENDER` is present
+- also supports explicit VPS security settings through environment variables
 
 Blueprint flow:
 
@@ -285,9 +286,10 @@ The repository also includes a production-oriented Docker setup:
 
 Typical startup flow:
 
-1. `python manage.py migrate --noinput`
-2. `python manage.py collectstatic --noinput`
-3. `gunicorn` on port `8000`
+1. wait for database connectivity
+2. `python manage.py migrate --noinput`
+3. `python manage.py collectstatic --noinput`
+4. `gunicorn` on port `8000`
 
 Example:
 
@@ -296,6 +298,30 @@ docker compose up --build -d
 docker compose logs -f web
 docker compose down
 ```
+
+The compose stack includes:
+
+- `web`: Django ASGI app served by Gunicorn/Uvicorn
+- `db`: PostgreSQL with a persistent `postgres_data` volume
+
+Important VPS-oriented environment variables:
+
+```env
+DEBUG=False
+DJANGO_SECRET_KEY=replace-with-a-real-secret
+DATABASE_URL=postgresql://user:password@db:5432/team_task_manager
+ALLOWED_HOSTS=tasks.example.com,127.0.0.1
+CSRF_TRUSTED_ORIGINS=https://tasks.example.com
+SECURE_PROXY_SSL_HEADER=True
+SECURE_SSL_REDIRECT=True
+SECURE_HSTS_SECONDS=31536000
+SECURE_HSTS_INCLUDE_SUBDOMAINS=True
+SECURE_HSTS_PRELOAD=False
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
+```
+
+Set `SECURE_HSTS_PRELOAD=True` only after the production domain is permanently served over HTTPS and is ready for browser preload submission.
 
 ## HTML Routes
 

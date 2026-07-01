@@ -77,6 +77,23 @@ csrf_trusted_origins = [
 if render_external_hostname:
     csrf_trusted_origins.append(f"https://{render_external_hostname}")
 CSRF_TRUSTED_ORIGINS = list(dict.fromkeys(csrf_trusted_origins))
+DEV_DASHBOARD_URL = os.getenv("DEV_DASHBOARD_URL", "http://127.0.0.1:8101")
+KNOWLEDGE_SYSTEM_URL = os.getenv("KNOWLEDGE_SYSTEM_URL", "http://127.0.0.1:8102")
+KNOWLEDGE_BASE_URL = os.getenv("KNOWLEDGE_BASE_URL", "http://127.0.0.1:8103")
+TASK_MANAGER_URL = os.getenv("TASK_MANAGER_URL", "http://127.0.0.1:8104")
+ECOSYSTEM_CURRENT_SERVICE = os.getenv("ECOSYSTEM_CURRENT_SERVICE", "team_task_manager")
+ECOSYSTEM_URLS = {
+    "dev_dashboard": DEV_DASHBOARD_URL,
+    "knowledge_system": KNOWLEDGE_SYSTEM_URL,
+    "knowledge_base": KNOWLEDGE_BASE_URL,
+    "team_task_manager": TASK_MANAGER_URL,
+}
+ECOSYSTEM_APPS = [
+    {"id": "dev_dashboard", "label": "Home", "url": DEV_DASHBOARD_URL},
+    {"id": "knowledge_system", "label": "Knowledge", "url": KNOWLEDGE_SYSTEM_URL},
+    {"id": "knowledge_base", "label": "Base", "url": KNOWLEDGE_BASE_URL},
+    {"id": "team_task_manager", "label": "Tasks", "url": TASK_MANAGER_URL},
+]
 
 INSTALLED_APPS = [
     "django.contrib.admin",
@@ -99,7 +116,6 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
-    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -107,6 +123,9 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
+
+if not DEBUG:
+    MIDDLEWARE.insert(1, "whitenoise.middleware.WhiteNoiseMiddleware")
 
 ROOT_URLCONF = "team_task_manager.urls"
 
@@ -121,6 +140,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "core.context_processors.ecosystem",
             ],
         },
     },
@@ -157,10 +177,21 @@ TIME_ZONE = os.getenv("TIME_ZONE", "UTC")
 
 USE_I18N = True
 USE_TZ = True
-STATIC_URL = "static/"
+STATIC_URL = "/static/"
 STATICFILES_DIRS = [STATIC_DIR]
 STATIC_ROOT = BASE_DIR / "staticfiles"
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+STORAGES = {
+    "default": {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": (
+            "django.contrib.staticfiles.storage.StaticFilesStorage"
+            if DEBUG
+            else "whitenoise.storage.CompressedManifestStaticFilesStorage"
+        ),
+    },
+}
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 
@@ -168,14 +199,17 @@ LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "home"
 LOGOUT_REDIRECT_URL = "login"
 
-if IS_RENDER:
-    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
-    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000"))
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", True)
-    SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", True)
+SECURE_PROXY_SSL_HEADER = (
+    ("HTTP_X_FORWARDED_PROTO", "https")
+    if env_bool("SECURE_PROXY_SSL_HEADER", IS_RENDER)
+    else None
+)
+SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", IS_RENDER)
+SESSION_COOKIE_SECURE = env_bool("SESSION_COOKIE_SECURE", IS_RENDER)
+CSRF_COOKIE_SECURE = env_bool("CSRF_COOKIE_SECURE", IS_RENDER)
+SECURE_HSTS_SECONDS = int(os.getenv("SECURE_HSTS_SECONDS", "31536000" if IS_RENDER else "0"))
+SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", IS_RENDER)
+SECURE_HSTS_PRELOAD = env_bool("SECURE_HSTS_PRELOAD", IS_RENDER)
 
 if SENTRY_DSN:
     sentry_sdk.init(

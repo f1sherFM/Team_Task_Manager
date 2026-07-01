@@ -2,13 +2,14 @@ from django.contrib import admin
 from django.urls import include, path
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
-from core.views import HealthCheckView, HomeView, ReadinessCheckView
+from core.views import EcosystemSummaryView, HealthCheckView, HomeView, ReadinessCheckView
 from workspaces.views import InvitationAcceptView
 
 urlpatterns = [
     path("", HomeView.as_view(), name="home"),
     path("healthz/", HealthCheckView.as_view(), name="healthz"),
     path("readyz/", ReadinessCheckView.as_view(), name="readyz"),
+    path("ecosystem/summary/", EcosystemSummaryView.as_view(), name="ecosystem-summary"),
     path("accounts/", include("accounts.urls")),
     path(
         "invitations/<uuid:token>/accept/",

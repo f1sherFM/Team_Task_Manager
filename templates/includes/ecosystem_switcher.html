@@ -1,0 +1,13 @@
+<nav class="ecosystem-switcher" aria-label="NANDE ecosystem apps">
+    <a class="ecosystem-switcher__brand" href="{{ ecosystem_urls.dev_dashboard }}">
+        <span class="ecosystem-switcher__mark" aria-hidden="true"></span>
+        <span>NANDE</span>
+    </a>
+    <div class="ecosystem-switcher__apps">
+        {% for app in ecosystem_apps %}
+            <a class="ecosystem-switcher__app" href="{{ app.url }}" {% if app.id == ecosystem_current_service %}aria-current="page"{% endif %}>
+                {{ app.label }}
+            </a>
+        {% endfor %}
+    </div>
+</nav>

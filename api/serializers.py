@@ -1,4 +1,5 @@
 from django.contrib.auth import get_user_model
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from activity.models import ActivityLog
@@ -280,6 +281,7 @@ class CommentSerializer(serializers.ModelSerializer):
         )
         read_only_fields = ("id", "author", "text", "created_at", "updated_at", "is_deleted")
 
+    @extend_schema_field(str)
     def get_text(self, obj):
         return "[deleted]" if obj.is_deleted else obj.text
 
