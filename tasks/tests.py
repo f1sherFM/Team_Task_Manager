@@ -687,3 +687,126 @@ class TaskIntegrityCheckTests(TestCase):
         item = TaskChecklistItem.objects.create(task=self.task, text="", position=0)
         issues = check_checklist_item_integrity()
         self.assertTrue(any(str(item.id) in issue for issue in issues))
+
+
+class TaskPermissionTrapTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="trap_owner", password="secret123")
+        self.workspace = create_workspace(owner=self.owner, name="Trap WS")
+        self.project = create_project(
+            workspace=self.workspace, name="Trap Project", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Unassigned Task",
+            description="",
+            priority="low",
+            due_date=None,
+            assignee=None,
+            created_by=self.owner,
+        )
+        self.comment = add_comment(task=self.task, author=self.owner, text="Trap comment")
+
+    def test_anonymous_and_none_user_cannot_bypass_permissions(self):
+        from django.contrib.auth.models import AnonymousUser
+
+        from core.permissions import (
+            can_archive_task,
+            can_change_task_status,
+            can_delete_comment,
+            can_delete_task,
+        )
+
+        anon = AnonymousUser()
+
+        class FakeUserWithNoneId:
+            id = None
+            is_authenticated = False
+
+        fake_user = FakeUserWithNoneId()
+
+        for user in [anon, fake_user, None]:
+            self.assertFalse(can_change_task_status(task=self.task, user=user))
+            self.assertFalse(can_archive_task(task=self.task, user=user))
+            self.assertFalse(can_delete_task(task=self.task, user=user))
+            self.assertFalse(can_delete_comment(comment=self.comment, user=user))
+
+
+class TaskTagCaseInsensitiveConstraintTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="tag_ci_owner", password="secret123")
+        self.workspace = create_workspace(owner=self.owner, name="Tag CI WS")
+
+    def test_tag_name_case_insensitive_duplicate_rejected(self):
+        from django.db import IntegrityError
+
+        create_task_tag(workspace=self.workspace, name="Backend", actor=self.owner)
+
+        # Service level should catch and raise DomainError
+        with self.assertRaises(DomainError):
+            create_task_tag(workspace=self.workspace, name="backend", actor=self.owner)
+
+        with self.assertRaises(DomainError):
+            create_task_tag(workspace=self.workspace, name="BACKEND", actor=self.owner)
+
+        # Direct DB level should raise IntegrityError
+        with self.assertRaises(IntegrityError):
+            TaskTag.objects.create(workspace=self.workspace, name="backend", slug="backend-2")
+
+    def test_update_tag_name_case_insensitive_duplicate_rejected(self):
+        create_task_tag(workspace=self.workspace, name="Frontend", actor=self.owner)
+        tag2 = create_task_tag(workspace=self.workspace, name="DevOps", actor=self.owner)
+
+        with self.assertRaises(DomainError):
+            update_task_tag(tag=tag2, actor=self.owner, name="frontend")
+
+
+class TaskAdminTagValidationTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="adm_owner", password="secret123")
+        self.workspace1 = create_workspace(owner=self.owner, name="Admin WS 1")
+        self.workspace2 = create_workspace(owner=self.owner, name="Admin WS 2")
+        self.project1 = create_project(
+            workspace=self.workspace1, name="Admin Proj 1", description="", created_by=self.owner
+        )
+        self.task1 = create_task(
+            project=self.project1,
+            title="Admin Task",
+            description="",
+            priority="low",
+            due_date=None,
+            assignee=None,
+            created_by=self.owner,
+        )
+        self.tag_ws1 = create_task_tag(
+            workspace=self.workspace1, name="WS1 Tag", actor=self.owner
+        )
+        self.tag_ws2 = create_task_tag(
+            workspace=self.workspace2, name="WS2 Tag", actor=self.owner
+        )
+
+    def test_task_admin_form_rejects_cross_workspace_tag(self):
+        from tasks.admin import TaskAdminForm
+
+        form = TaskAdminForm(
+            instance=self.task1,
+            data={
+                "project": self.project1.id,
+                "title": "Admin Task",
+                "priority": "low",
+                "status": "todo",
+                "tags": [self.tag_ws2.id],
+            },
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("tags", form.errors)
+        self.assertTrue(
+            any("Tags do not belong to the task workspace" in err for err in form.errors["tags"])
+        )
+
+    def test_add_checklist_item_with_is_completed(self):
+        item = add_checklist_item(
+            task=self.task1, text="Completed upfront", actor=self.owner, is_completed=True
+        )
+        self.assertTrue(item.is_completed)
+

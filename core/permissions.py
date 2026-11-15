@@ -101,35 +101,52 @@ def can_assign_task(*, task, user) -> bool:
 
 
 def can_change_task_status(*, task, user) -> bool:
-    if not is_task_writable(task):
+    if not is_task_writable(task) or not can_view_task(task=task, user=user):
         return False
 
     if can_manage_workspace(workspace=task.project.workspace, user=user):
         return True
 
-    return getattr(task.assignee, "id", None) == getattr(user, "id", None)
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        return False
+
+    assignee_id = getattr(task, "assignee_id", None)
+    return assignee_id is not None and assignee_id == user_id
 
 
 def can_delete_task(*, task, user) -> bool:
-    if not is_project_writable(task.project):
+    if not is_project_writable(task.project) or not can_view_task(task=task, user=user):
         return False
 
     if can_manage_workspace(workspace=task.project.workspace, user=user):
         return True
 
-    return getattr(task.created_by, "id", None) == getattr(user, "id", None)
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        return False
+
+    created_by_id = getattr(task, "created_by_id", None)
+    return created_by_id is not None and created_by_id == user_id
 
 
 def can_archive_task(*, task, user) -> bool:
-    if not is_project_writable(task.project):
+    if not is_project_writable(task.project) or not can_view_task(task=task, user=user):
         return False
 
     if can_manage_workspace(workspace=task.project.workspace, user=user):
         return True
 
-    return getattr(task.created_by, "id", None) == getattr(user, "id", None) or getattr(
-        task.assignee, "id", None
-    ) == getattr(user, "id", None)
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        return False
+
+    created_by_id = getattr(task, "created_by_id", None)
+    if created_by_id is not None and created_by_id == user_id:
+        return True
+
+    assignee_id = getattr(task, "assignee_id", None)
+    return assignee_id is not None and assignee_id == user_id
 
 
 def can_restore_task(*, task, user) -> bool:
@@ -153,10 +170,15 @@ def can_create_comment(*, task, user) -> bool:
 
 
 def can_delete_comment(*, comment, user) -> bool:
-    if not is_task_writable(comment.task):
+    if not is_task_writable(comment.task) or not can_view_task(task=comment.task, user=user):
         return False
 
     if can_manage_workspace(workspace=comment.task.project.workspace, user=user):
         return True
 
-    return getattr(comment.author, "id", None) == getattr(user, "id", None)
+    user_id = getattr(user, "id", None)
+    if user_id is None:
+        return False
+
+    author_id = getattr(comment, "author_id", None)
+    return author_id is not None and author_id == user_id

@@ -23,7 +23,6 @@ from tasks.services import (
     create_task_tag,
     reorder_checklist_items,
     restore_task,
-    set_task_tags,
     update_checklist_item,
     update_task,
     update_task_tag,
@@ -146,6 +145,7 @@ class TaskChecklistItemSerializer(serializers.ModelSerializer):
             return add_checklist_item(
                 task=task,
                 text=validated_data["text"],
+                is_completed=validated_data.get("is_completed", False),
                 actor=request.user,
             )
         except DomainError as exc:
@@ -320,6 +320,13 @@ class TaskSerializer(serializers.ModelSerializer):
             assignee = UNSET
             if assignee_id is not UNSET:
                 assignee = User.objects.filter(id=assignee_id).first() if assignee_id else None
+            tags = UNSET
+            if tag_ids is not UNSET:
+                tags = list(
+                    get_workspace_tags(workspace=instance.project.workspace).filter(id__in=tag_ids)
+                )
+                if len(tags) != len(tag_ids):
+                    raise DomainError("One or more tag IDs are invalid for this workspace.")
             task = update_task(
                 task=instance,
                 actor=request.user,
@@ -329,14 +336,8 @@ class TaskSerializer(serializers.ModelSerializer):
                 due_date=validated_data.get("due_date", UNSET),
                 assignee=assignee,
                 status=validated_data.get("status", UNSET),
+                tags=tags,
             )
-            if tag_ids is not UNSET:
-                tags = list(
-                    get_workspace_tags(workspace=task.project.workspace).filter(id__in=tag_ids)
-                )
-                if len(tags) != len(tag_ids):
-                    raise DomainError("One or more tag IDs are invalid for this workspace.")
-                task = set_task_tags(task=task, tags=tags, actor=request.user)
             return task
         except DomainError as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc

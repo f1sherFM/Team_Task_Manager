@@ -52,7 +52,11 @@ def get_project_task_candidates(*, project: Project) -> QuerySet[User]:
 
 
 def get_workspace_tags(*, workspace: Workspace) -> QuerySet[TaskTag]:
-    return TaskTag.objects.filter(workspace=workspace).order_by("name", "id")
+    return (
+        TaskTag.objects.filter(workspace=workspace)
+        .select_related("workspace")
+        .order_by("name", "id")
+    )
 
 
 def get_workspace_tag_by_slug(*, workspace: Workspace, slug: str) -> TaskTag:

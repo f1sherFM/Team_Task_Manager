@@ -39,6 +39,11 @@ class TaskTag(models.Model):
                 fields=("workspace", "slug"),
                 name="unique_tag_slug_per_workspace",
             ),
+            models.UniqueConstraint(
+                models.functions.Lower("name"),
+                "workspace",
+                name="unique_tag_name_ci_per_workspace",
+            ),
         ]
         ordering = ("name", "id")
 

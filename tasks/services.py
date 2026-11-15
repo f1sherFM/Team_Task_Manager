@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 
 from activity.services import log_activity
 from core.exceptions import DomainError
@@ -145,7 +145,13 @@ def update_task(
     due_date=UNSET,
     assignee=UNSET,
     status=UNSET,
+    tags=UNSET,
 ) -> Task:
+    if tags is not UNSET:
+        for tag in tags:
+            if tag.workspace_id != task.project.workspace_id:
+                raise DomainError("Cannot assign a tag from a different workspace.")
+
     task = update_task_details(
         task=task,
         actor=actor,
@@ -159,6 +165,8 @@ def update_task(
         task = assign_task(task=task, assignee=assignee, actor=actor)
     if status is not UNSET and status != task.status:
         task = change_task_status(task=task, status=status, actor=actor)
+    if tags is not UNSET:
+        task = set_task_tags(task=task, tags=tags, actor=actor)
     return task
 
 
@@ -237,50 +245,60 @@ def update_task_details(
 
 @transaction.atomic
 def archive_task(*, task: Task, actor) -> Task:
-    if task.project.is_archived:
+    locked_task = (
+        Task.objects.select_for_update()
+        .select_related("project__workspace")
+        .get(id=task.id)
+    )
+    if locked_task.project.is_archived:
         raise DomainError("Tasks cannot be changed in archived projects.")
 
-    if not can_archive_task(task=task, user=actor):
+    if not can_archive_task(task=locked_task, user=actor):
         raise DomainError("Permission denied to archive this task.")
 
-    if task.is_archived:
-        return task
+    if locked_task.is_archived:
+        return locked_task
 
-    task.is_archived = True
-    task.save(update_fields=["is_archived", "updated_at"])
+    locked_task.is_archived = True
+    locked_task.save(update_fields=["is_archived", "updated_at"])
     log_activity(
-        workspace=task.project.workspace,
+        workspace=locked_task.project.workspace,
         actor=actor,
         action="task_archived",
         target_type="task",
-        target_id=str(task.id),
-        metadata={"task_title": task.title, "project_id": task.project_id},
+        target_id=str(locked_task.id),
+        metadata={"task_title": locked_task.title, "project_id": locked_task.project_id},
     )
-    return task
+    return locked_task
 
 
 @transaction.atomic
 def restore_task(*, task: Task, actor) -> Task:
-    if task.project.is_archived:
+    locked_task = (
+        Task.objects.select_for_update()
+        .select_related("project__workspace")
+        .get(id=task.id)
+    )
+    if locked_task.project.is_archived:
         raise DomainError("Tasks cannot be changed in archived projects.")
 
-    if not can_restore_task(task=task, user=actor):
+    if not can_restore_task(task=locked_task, user=actor):
         raise DomainError("Permission denied to restore this task.")
 
-    if not task.is_archived:
-        return task
+    if not locked_task.is_archived:
+        return locked_task
 
-    task.is_archived = False
-    task.save(update_fields=["is_archived", "updated_at"])
+    locked_task.is_archived = False
+    locked_task.save(update_fields=["is_archived", "updated_at"])
     log_activity(
-        workspace=task.project.workspace,
+        workspace=locked_task.project.workspace,
         actor=actor,
         action="task_restored",
         target_type="task",
-        target_id=str(task.id),
-        metadata={"task_title": task.title, "project_id": task.project_id},
+        target_id=str(locked_task.id),
+        metadata={"task_title": locked_task.title, "project_id": locked_task.project_id},
     )
-    return task
+    return locked_task
 
 
 @transaction.atomic
@@ -341,16 +359,22 @@ def create_task_tag(
     if workspace.tags.filter(name__iexact=clean_name).exists():
         raise DomainError(f"Tag with name '{clean_name}' already exists in this workspace.")
 
-    tag = create_with_unique_slug(
-        model=TaskTag,
-        value=clean_name,
-        scope={"workspace": workspace},
-        create_kwargs={
-            "workspace": workspace,
-            "name": clean_name,
-            "color": clean_color,
-        },
-    )
+    try:
+        tag = create_with_unique_slug(
+            model=TaskTag,
+            value=clean_name,
+            scope={"workspace": workspace},
+            create_kwargs={
+                "workspace": workspace,
+                "name": clean_name,
+                "color": clean_color,
+            },
+        )
+    except IntegrityError as exc:
+        raise DomainError(
+            f"Tag with name '{clean_name}' already exists in this workspace."
+        ) from exc
+
     log_activity(
         workspace=workspace,
         actor=actor,
@@ -374,6 +398,7 @@ def update_task_tag(
         raise DomainError("Only workspace admins can manage tags.")
 
     update_fields = []
+    clean_name = None
     if name is not UNSET:
         clean_name = name.strip()
         if not clean_name:
@@ -395,7 +420,13 @@ def update_task_tag(
             update_fields.append("color")
 
     if update_fields:
-        tag.save(update_fields=update_fields)
+        try:
+            tag.save(update_fields=update_fields)
+        except IntegrityError as exc:
+            raise DomainError(
+                f"Tag with name '{clean_name or tag.name}' already exists in this workspace."
+            ) from exc
+
         log_activity(
             workspace=tag.workspace,
             actor=actor,
@@ -495,8 +526,14 @@ def add_checklist_item(
     text: str,
     actor,
     position: int | None = None,
+    is_completed: bool = False,
 ) -> TaskChecklistItem:
-    if not can_update_task(task=task, user=actor):
+    locked_task = (
+        Task.objects.select_for_update()
+        .select_related("project__workspace")
+        .get(id=task.id)
+    )
+    if not can_update_task(task=locked_task, user=actor):
         raise DomainError("Permission denied to update task checklist.")
 
     clean_text = text.strip()
@@ -504,20 +541,26 @@ def add_checklist_item(
         raise DomainError("Checklist item text cannot be empty.")
 
     if position is None:
-        position = task.checklist_items.count()
+        position = locked_task.checklist_items.count()
 
     item = TaskChecklistItem.objects.create(
-        task=task,
+        task=locked_task,
         text=clean_text,
+        is_completed=bool(is_completed),
         position=position,
     )
     log_activity(
-        workspace=task.project.workspace,
+        workspace=locked_task.project.workspace,
         actor=actor,
         action="checklist_item_added",
         target_type="task",
-        target_id=str(task.id),
-        metadata={"item_id": item.id, "text": item.text, "position": item.position},
+        target_id=str(locked_task.id),
+        metadata={
+            "item_id": item.id,
+            "text": item.text,
+            "position": item.position,
+            "is_completed": item.is_completed,
+        },
     )
     return item
 
@@ -530,7 +573,12 @@ def update_checklist_item(
     text: str = UNSET,
     is_completed: bool = UNSET,
 ) -> TaskChecklistItem:
-    if not can_update_task(task=item.task, user=actor):
+    locked_item = (
+        TaskChecklistItem.objects.select_for_update()
+        .select_related("task__project__workspace")
+        .get(id=item.id)
+    )
+    if not can_update_task(task=locked_item.task, user=actor):
         raise DomainError("Permission denied to update task checklist.")
 
     update_fields = []
@@ -538,68 +586,81 @@ def update_checklist_item(
         clean_text = text.strip()
         if not clean_text:
             raise DomainError("Checklist item text cannot be empty.")
-        if item.text != clean_text:
-            item.text = clean_text
+        if locked_item.text != clean_text:
+            locked_item.text = clean_text
             update_fields.append("text")
 
     if is_completed is not UNSET:
         val = bool(is_completed)
-        if item.is_completed != val:
-            item.is_completed = val
+        if locked_item.is_completed != val:
+            locked_item.is_completed = val
             update_fields.append("is_completed")
 
     if update_fields:
-        item.save(update_fields=[*update_fields, "updated_at"])
+        locked_item.save(update_fields=[*update_fields, "updated_at"])
         log_activity(
-            workspace=item.task.project.workspace,
+            workspace=locked_item.task.project.workspace,
             actor=actor,
             action="checklist_item_updated",
             target_type="task",
-            target_id=str(item.task_id),
-            metadata={"item_id": item.id, "text": item.text, "is_completed": item.is_completed},
+            target_id=str(locked_item.task_id),
+            metadata={
+                "item_id": locked_item.id,
+                "text": locked_item.text,
+                "is_completed": locked_item.is_completed,
+            },
         )
-    return item
+    return locked_item
 
 
 @transaction.atomic
 def toggle_checklist_item(*, item: TaskChecklistItem, actor) -> TaskChecklistItem:
-    if not can_update_task(task=item.task, user=actor):
+    locked_item = (
+        TaskChecklistItem.objects.select_for_update()
+        .select_related("task__project__workspace")
+        .get(id=item.id)
+    )
+    if not can_update_task(task=locked_item.task, user=actor):
         raise DomainError("Permission denied to update task checklist.")
 
-    item.is_completed = not item.is_completed
-    item.save(update_fields=["is_completed", "updated_at"])
+    locked_item.is_completed = not locked_item.is_completed
+    locked_item.save(update_fields=["is_completed", "updated_at"])
     log_activity(
-        workspace=item.task.project.workspace,
+        workspace=locked_item.task.project.workspace,
         actor=actor,
         action="checklist_item_toggled",
         target_type="task",
-        target_id=str(item.task_id),
-        metadata={"item_id": item.id, "is_completed": item.is_completed},
+        target_id=str(locked_item.task_id),
+        metadata={"item_id": locked_item.id, "is_completed": locked_item.is_completed},
     )
-    return item
+    return locked_item
 
 
 @transaction.atomic
 def delete_checklist_item(*, item: TaskChecklistItem, actor) -> None:
-    task = item.task
-    if not can_update_task(task=task, user=actor):
+    locked_task = (
+        Task.objects.select_for_update()
+        .select_related("project__workspace")
+        .get(id=item.task_id)
+    )
+    if not can_update_task(task=locked_task, user=actor):
         raise DomainError("Permission denied to update task checklist.")
 
     item_id = item.id
-    item.delete()
+    TaskChecklistItem.objects.filter(id=item_id).delete()
 
     # Re-normalize positions so there are no gaps
-    for pos, it in enumerate(task.checklist_items.order_by("position", "id")):
+    for pos, it in enumerate(locked_task.checklist_items.order_by("position", "id")):
         if it.position != pos:
             it.position = pos
             it.save(update_fields=["position", "updated_at"])
 
     log_activity(
-        workspace=task.project.workspace,
+        workspace=locked_task.project.workspace,
         actor=actor,
         action="checklist_item_deleted",
         target_type="task",
-        target_id=str(task.id),
+        target_id=str(locked_task.id),
         metadata={"item_id": item_id},
     )
 
@@ -611,10 +672,15 @@ def reorder_checklist_items(
     item_ids: list[int],
     actor,
 ) -> list[TaskChecklistItem]:
-    if not can_update_task(task=task, user=actor):
+    locked_task = (
+        Task.objects.select_for_update()
+        .select_related("project__workspace")
+        .get(id=task.id)
+    )
+    if not can_update_task(task=locked_task, user=actor):
         raise DomainError("Permission denied to update task checklist.")
 
-    current_items = list(task.checklist_items.all())
+    current_items = list(locked_task.checklist_items.all())
     current_ids = {it.id for it in current_items}
     if set(item_ids) != current_ids or len(item_ids) != len(current_items):
         raise DomainError("Invalid checklist item IDs provided for reordering.")
@@ -627,14 +693,14 @@ def reorder_checklist_items(
             it.save(update_fields=["position", "updated_at"])
 
     log_activity(
-        workspace=task.project.workspace,
+        workspace=locked_task.project.workspace,
         actor=actor,
         action="checklist_reordered",
         target_type="task",
-        target_id=str(task.id),
+        target_id=str(locked_task.id),
         metadata={"ordered_item_ids": item_ids},
     )
-    return list(task.checklist_items.order_by("position", "id"))
+    return list(locked_task.checklist_items.order_by("position", "id"))
 
 
 def _build_task_stub(*, project: Project) -> Task:

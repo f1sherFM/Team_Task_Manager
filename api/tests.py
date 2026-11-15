@@ -959,6 +959,18 @@ class TaskChecklistAPITests(TestCase):
         self.assertEqual(del_res.status_code, 204)
         self.assertEqual(TaskChecklistItem.objects.filter(id=item_id).count(), 0)
 
+    def test_checklist_create_with_is_completed(self):
+        self.client.force_authenticate(self.member)
+        url = (
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/"
+            f"tasks/{self.task.slug}/checklist/"
+        )
+        res = self.client.post(
+            url, {"text": "Step pre-completed", "is_completed": True}, format="json"
+        )
+        self.assertEqual(res.status_code, 201)
+        self.assertTrue(res.data["is_completed"])
+
     def test_checklist_reorder_api(self):
         item1 = add_checklist_item(task=self.task, text="Item A", actor=self.member)
         item2 = add_checklist_item(task=self.task, text="Item B", actor=self.member)
@@ -1077,3 +1089,28 @@ class TaskLifecycleAndDeletionAPITests(TestCase):
         created_slug = res.data["slug"]
         created_task = Task.objects.get(project=self.project, slug=created_slug)
         self.assertIn(self.tag, created_task.tags.all())
+
+    def test_task_patch_atomic_rollback_on_invalid_tag_ids(self):
+        self.client.force_authenticate(self.member)
+        url = (
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/"
+            f"tasks/{self.task.slug}/"
+        )
+        original_title = self.task.title
+        original_desc = self.task.description
+
+        response = self.client.patch(
+            url,
+            {
+                "title": "Should Not Persist",
+                "description": "Neither should this",
+                "tag_ids": [999999],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, original_title)
+        self.assertEqual(self.task.description, original_desc)
+
