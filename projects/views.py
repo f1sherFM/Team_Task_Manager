@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic import FormView, TemplateView, View
@@ -53,8 +54,13 @@ class WorkspaceProjectListView(WorkspaceProjectAccessMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        projects_qs = get_workspace_projects(workspace=self.workspace)
+        paginator = Paginator(projects_qs, 12)
+        page_obj = paginator.get_page(self.request.GET.get("page"))
         context["workspace"] = self.workspace
-        context["projects"] = get_workspace_projects(workspace=self.workspace)
+        context["projects"] = page_obj
+        context["page_obj"] = page_obj
+        context["is_paginated"] = page_obj.has_other_pages()
         context["can_create_project"] = can_create_project(
             workspace=self.workspace,
             user=self.request.user,

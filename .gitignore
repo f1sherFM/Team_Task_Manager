@@ -5,3 +5,7 @@ __pycache__/
 venv/
 .env
 staticfiles/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/

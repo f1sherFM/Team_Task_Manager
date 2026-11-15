@@ -57,7 +57,12 @@ class HealthEndpointTests(TestCase):
         self.assertEqual(response.json()["checks"]["database"]["status"], "ok")
         self.assertEqual(response.json()["checks"]["migrations"]["status"], "ok")
 
-    def test_ecosystem_summary_returns_task_metrics_and_recent_items(self):
+    def test_ecosystem_summary_requires_authentication(self):
+        response = self.client.get("/ecosystem/summary/")
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.url)
+
+    def test_ecosystem_summary_returns_scoped_task_metrics_and_recent_items(self):
         User = get_user_model()
         owner = User.objects.create_user(username="summary-owner")
         workspace = create_workspace(owner=owner, name="Summary Workspace")
@@ -75,6 +80,23 @@ class HealthEndpointTests(TestCase):
             priority=TaskPriority.HIGH,
         )
 
+        other_user = User.objects.create_user(username="other-user")
+        other_ws = create_workspace(owner=other_user, name="Other Workspace")
+        other_proj = create_project(
+            workspace=other_ws,
+            name="Other Project",
+            description="",
+            created_by=other_user,
+        )
+        create_task_for_agent(
+            actor_ref="other-user",
+            workspace_ref=other_ws.slug,
+            project_ref=other_proj.slug,
+            title="Other task",
+            priority=TaskPriority.HIGH,
+        )
+
+        self.client.force_login(owner)
         response = self.client.get("/ecosystem/summary/")
 
         self.assertEqual(response.status_code, 200)
@@ -84,6 +106,7 @@ class HealthEndpointTests(TestCase):
         self.assertIn({"label": "Workspaces", "value": 1}, payload["metrics"])
         self.assertIn({"label": "Open tasks", "value": 1}, payload["metrics"])
         self.assertIn({"label": "High priority", "value": 1}, payload["metrics"])
+        self.assertEqual(len(payload["recent_items"]), 1)
         self.assertEqual(payload["recent_items"][0]["label"], "Open summary task")
 
 

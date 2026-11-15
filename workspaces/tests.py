@@ -319,3 +319,24 @@ class WorkspaceServiceTests(TestCase):
         membership.refresh_from_db()
         self.assertEqual(workspace.owner, self.admin)
         self.assertEqual(membership.role, MembershipRole.OWNER)
+
+
+class WorkspaceListViewPaginationTests(TestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(username="ws_page_user", password="secret123")
+        for i in range(15):
+            create_workspace(owner=self.user, name=f"Workspace {i + 1}")
+
+    def test_workspace_list_pagination(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.user)
+        response = self.client.get(reverse("workspace-list"))
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_paginated"])
+        self.assertEqual(len(response.context["workspaces"]), 12)
+
+        response_p2 = self.client.get(reverse("workspace-list") + "?page=2")
+        self.assertEqual(response_p2.status_code, 200)
+        self.assertEqual(len(response_p2.context["workspaces"]), 3)
+

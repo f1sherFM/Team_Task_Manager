@@ -1,5 +1,6 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import redirect
 from django.views import View
@@ -57,7 +58,12 @@ class WorkspaceListView(LoginRequiredMixin, TemplateView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["workspaces"] = get_user_workspaces(self.request.user)
+        workspaces_qs = get_user_workspaces(self.request.user)
+        paginator = Paginator(workspaces_qs, 12)
+        page_obj = paginator.get_page(self.request.GET.get("page"))
+        context["workspaces"] = page_obj
+        context["page_obj"] = page_obj
+        context["is_paginated"] = page_obj.has_other_pages()
         return context
 
 

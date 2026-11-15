@@ -1,3 +1,4 @@
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import JsonResponse
 from django.urls import reverse
 from django.utils import timezone
@@ -6,9 +7,11 @@ from django.views.generic import TemplateView
 
 from core.health import get_liveness_status, get_readiness_status
 from core.selectors import get_home_dashboard
-from projects.models import Project
-from tasks.models import Task, TaskPriority, TaskStatus
-from workspaces.models import Invitation, Workspace
+from projects.selectors import get_user_projects
+from tasks.models import TaskPriority, TaskStatus
+from tasks.selectors import get_user_tasks
+from workspaces.models import Invitation
+from workspaces.selectors import get_user_workspaces
 
 
 class HomeView(TemplateView):
@@ -33,16 +36,17 @@ class ReadinessCheckView(View):
         return JsonResponse(payload, status=status_code)
 
 
-class EcosystemSummaryView(View):
+class EcosystemSummaryView(LoginRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         today = timezone.localdate()
-        active_projects = Project.objects.filter(is_archived=False)
-        open_tasks = Task.objects.exclude(status=TaskStatus.DONE)
+        user_workspaces = get_user_workspaces(request.user)
+        active_projects = get_user_projects(request.user).filter(is_archived=False)
+        open_tasks = get_user_tasks(request.user).exclude(status=TaskStatus.DONE)
         overdue_tasks = open_tasks.filter(due_date__lt=today)
-        latest_tasks = (
-            open_tasks.select_related("project", "project__workspace")
-            .order_by("-updated_at", "-created_at")[:3]
+        user_invites = Invitation.objects.filter(
+            workspace__in=user_workspaces, accepted_at__isnull=True
         )
+        latest_tasks = open_tasks.order_by("-updated_at", "-created_at")[:3]
 
         return JsonResponse(
             {
@@ -50,7 +54,7 @@ class EcosystemSummaryView(View):
                 "status": "ok",
                 "generated_at": timezone.now().isoformat(),
                 "metrics": [
-                    {"label": "Workspaces", "value": Workspace.objects.count()},
+                    {"label": "Workspaces", "value": user_workspaces.count()},
                     {"label": "Active projects", "value": active_projects.count()},
                     {"label": "Open tasks", "value": open_tasks.count()},
                     {"label": "Overdue tasks", "value": overdue_tasks.count()},
@@ -60,7 +64,7 @@ class EcosystemSummaryView(View):
                     },
                     {
                         "label": "Open invites",
-                        "value": Invitation.objects.filter(accepted_at__isnull=True).count(),
+                        "value": user_invites.count(),
                     },
                 ],
                 "recent_items": [

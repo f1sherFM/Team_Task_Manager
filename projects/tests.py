@@ -62,3 +62,36 @@ class ProjectServiceTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.project.refresh_from_db()
         self.assertTrue(self.project.is_archived)
+
+
+class WorkspaceProjectListViewPaginationTests(TestCase):
+    def setUp(self):
+        from workspaces.services import create_workspace
+
+        self.user = User.objects.create_user(username="proj_page_user", password="secret123")
+        self.workspace = create_workspace(owner=self.user, name="Project Page WS")
+        for i in range(15):
+            create_project(
+                workspace=self.workspace,
+                name=f"Project {i + 1}",
+                description="",
+                created_by=self.user,
+            )
+
+    def test_project_list_pagination(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.user)
+        url = reverse(
+            "workspace-project-list",
+            kwargs={"workspace_slug": self.workspace.slug},
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_paginated"])
+        self.assertEqual(len(response.context["projects"]), 12)
+
+        response_p2 = self.client.get(url + "?page=2")
+        self.assertEqual(response_p2.status_code, 200)
+        self.assertEqual(len(response_p2.context["projects"]), 3)
+

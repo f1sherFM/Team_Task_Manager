@@ -3,7 +3,7 @@ setlocal
 
 set "ROOT=%~dp0"
 cd /d "%ROOT%"
-set "BUNDLED_PYTHON=C:\Users\nande\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
+set "BUNDLED_PYTHON=%USERPROFILE%\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe"
 set "PYTHON_BOOTSTRAP="
 
 where py >nul 2>&1
@@ -11,6 +11,21 @@ if not errorlevel 1 (
     py -3.13 --version >nul 2>&1
     if not errorlevel 1 (
         set "PYTHON_BOOTSTRAP=py -3.13"
+    ) else (
+        py -3.12 --version >nul 2>&1
+        if not errorlevel 1 (
+            set "PYTHON_BOOTSTRAP=py -3.12"
+        ) else (
+            py -3.11 --version >nul 2>&1
+            if not errorlevel 1 (
+                set "PYTHON_BOOTSTRAP=py -3.11"
+            ) else (
+                py -3 --version >nul 2>&1
+                if not errorlevel 1 (
+                    set "PYTHON_BOOTSTRAP=py -3"
+                )
+            )
+        )
     )
 )
 
@@ -21,13 +36,23 @@ if not defined PYTHON_BOOTSTRAP (
 )
 
 if not defined PYTHON_BOOTSTRAP (
+    where python >nul 2>&1
+    if not errorlevel 1 (
+        python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
+        if not errorlevel 1 (
+            set "PYTHON_BOOTSTRAP=python"
+        )
+    )
+)
+
+if not defined PYTHON_BOOTSTRAP (
     echo [TTM] No working Python bootstrap runtime was found.
-    echo [TTM] Install Python 3.13 or restore the bundled Codex runtime.
+    echo [TTM] Please install Python 3.11+ or make sure python/py is available in PATH.
     pause
     exit /b 1
 )
 
-echo [TTM] Rebuilding local virtual environment...
+echo [TTM] Rebuilding local virtual environment with %PYTHON_BOOTSTRAP%...
 %PYTHON_BOOTSTRAP% -m venv "%ROOT%.venv" --clear
 if errorlevel 1 (
     echo [TTM] Failed to create the local virtual environment.

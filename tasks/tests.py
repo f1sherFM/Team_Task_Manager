@@ -246,3 +246,46 @@ class TaskServiceTests(TestCase):
         self.assertEqual(second_task.description, "Original second")
         self.assertIsNone(first_task.assignee)
         self.assertIsNone(second_task.assignee)
+
+
+class ProjectTaskListViewPaginationTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="list_owner", password="password123")
+        self.workspace = create_workspace(owner=self.owner, name="List Workspace")
+        self.project = create_project(
+            workspace=self.workspace,
+            name="List Project",
+            description="",
+            created_by=self.owner,
+        )
+        for i in range(25):
+            create_task(
+                project=self.project,
+                title=f"Task {i + 1}",
+                description="",
+                priority="medium",
+                due_date=None,
+                assignee=None,
+                created_by=self.owner,
+            )
+
+    def test_task_list_pagination(self):
+        from django.urls import reverse
+
+        self.client.force_login(self.owner)
+        url = reverse(
+            "project-task-list",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+            },
+        )
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context["is_paginated"])
+        self.assertEqual(len(response.context["tasks"]), 20)
+
+        response_p2 = self.client.get(url + "?page=2")
+        self.assertEqual(response_p2.status_code, 200)
+        self.assertEqual(len(response_p2.context["tasks"]), 5)
+

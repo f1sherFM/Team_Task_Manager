@@ -1,6 +1,7 @@
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
+from django.core.paginator import Paginator
 from django.http import Http404
 from django.shortcuts import redirect
 from django.views.generic import FormView, TemplateView
@@ -72,8 +73,13 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
+        tasks_qs = get_project_tasks(project=self.project)
+        paginator = Paginator(tasks_qs, 20)
+        page_obj = paginator.get_page(self.request.GET.get("page"))
         context["project"] = self.project
-        context["tasks"] = get_project_tasks(project=self.project)
+        context["tasks"] = page_obj
+        context["page_obj"] = page_obj
+        context["is_paginated"] = page_obj.has_other_pages()
         context["can_create_task"] = can_create_task(project=self.project, user=self.request.user)
         context["is_project_archived"] = self.project.is_archived
         return context
