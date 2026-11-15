@@ -117,6 +117,23 @@ When opening a pull request, please include:
 
 GitHub Actions will run linting, Django checks, migration drift checks, PostgreSQL-backed tests, and coverage reporting.
 
+## Code Review with CodeRabbit
+
+The repository includes a [`.coderabbit.yaml`](.coderabbit.yaml) configuration tailored to Team Task Manager:
+- Enforcing domain separation: state changes in `services.py` with `transaction.atomic()`, read queries in `selectors.py`
+- Ensuring `core.permissions` handles domain access boundaries (User -> Membership -> Workspace -> Project -> Task)
+- Keeping serializers and views thin
+- Ignoring migrations, static assets, and generated files
+
+You can run local reviews with the CodeRabbit CLI or Antigravity's CodeRabbit subagent (`code-reviewer`):
+
+```bash
+# In PowerShell (Windows):
+coderabbit review
+```
+
+On GitHub, CodeRabbit automatically analyzes pull requests against these guidelines and provides summaries and inline suggestions.
+
 Good PR examples for this repository:
 
 - `feat: add workspace invitations`

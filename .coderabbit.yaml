@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "ru-RU"
+tone_instructions: >-
+  Be concise, direct, and constructive. Focus on Django 5.x / Python 3.12 best practices,
+  strict adherence to service/selector architecture, transaction safety with `transaction.atomic()`,
+  membership-based authorization boundaries (User -> Membership -> Workspace -> Project -> Task),
+  and performance optimization (preventing N+1 queries with select_related / prefetch_related).
+
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  sequence_diagrams: true
+
+  path_filters:
+    - "!**/migrations/**"
+    - "!**/static/**"
+    - "!**/staticfiles/**"
+    - "!**/htmlcov/**"
+    - "!**/*.sqlite3"
+    - "!**/*.log"
+    - "!**/__pycache__/**"
+    - "!**/.git/**"
+
+  path_instructions:
+    - path: "**/services.py"
+      instructions: >-
+        Ensure all state mutations and business rules are centralized in services.
+        Multi-model write operations must be wrapped in `transaction.atomic()`.
+        Verify that domain activity logs are emitted where required.
+        Views and serializers must never contain business logic directly.
+    - path: "**/selectors.py"
+      instructions: >-
+        Ensure selectors perform read-only queries with appropriate `select_related`
+        and `prefetch_related` optimizations to prevent N+1 query bottlenecks.
+        Selectors must never mutate model state.
+    - path: "core/permissions.py"
+      instructions: >-
+        Verify that domain access rules strictly enforce the membership hierarchy:
+        User -> Membership -> Workspace -> Project -> Task.
+        Ensure role permissions (owner, admin, member) are rigorously checked.
+    - path: "api/**"
+      instructions: >-
+        Ensure DRF serializers and views remain thin.
+        Mutations must be delegated to services, queries to selectors,
+        and permission checks to `core.permissions`.
+
+chat:
+  auto_reply: true
