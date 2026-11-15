@@ -20,7 +20,7 @@ if not errorlevel 1 (
             if not errorlevel 1 (
                 set "PYTHON_BOOTSTRAP=py -3.11"
             ) else (
-                py -3 --version >nul 2>&1
+                py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
                 if not errorlevel 1 (
                     set "PYTHON_BOOTSTRAP=py -3"
                 )

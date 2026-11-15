@@ -7,6 +7,7 @@ def get_user_workspaces(user) -> QuerySet[Workspace]:
     return (
         Workspace.objects.filter(memberships__user=user)
         .select_related("owner")
+        .order_by("name", "id")
         .distinct()
     )
 

@@ -1,10 +1,7 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
 language: "ru-RU"
 tone_instructions: >-
-  Be concise, direct, and constructive. Focus on Django 5.x / Python 3.12 best practices,
-  strict adherence to service/selector architecture, transaction safety with `transaction.atomic()`,
-  membership-based authorization boundaries (User -> Membership -> Workspace -> Project -> Task),
-  and performance optimization (preventing N+1 queries with select_related / prefetch_related).
+  Be concise, direct, and constructive. Review code as a Senior Python/Django engineer with a focus on architecture, correctness, security, and performance.
 
 reviews:
   profile: "chill"

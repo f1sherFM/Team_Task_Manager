@@ -8,6 +8,7 @@ def get_user_projects(user) -> QuerySet[Project]:
     return (
         Project.objects.filter(workspace__memberships__user=user)
         .select_related("workspace", "created_by", "workspace__owner")
+        .order_by("name", "id")
         .distinct()
     )
 
@@ -16,6 +17,7 @@ def get_workspace_projects(*, workspace: Workspace) -> QuerySet[Project]:
     return (
         Project.objects.filter(workspace=workspace)
         .select_related("workspace", "created_by", "workspace__owner")
+        .order_by("name", "id")
     )
 
 
