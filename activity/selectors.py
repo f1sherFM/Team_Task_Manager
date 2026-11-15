@@ -9,7 +9,7 @@ def get_user_activity(user) -> QuerySet[ActivityLog]:
         ActivityLog.objects.filter(workspace__memberships__user=user)
         .select_related("workspace", "actor")
         .distinct()
-        .order_by("-created_at")
+        .order_by("-created_at", "-id")
     )
 
 
@@ -17,7 +17,7 @@ def get_workspace_activity(workspace: Workspace) -> QuerySet[ActivityLog]:
     return (
         ActivityLog.objects.filter(workspace=workspace)
         .select_related("workspace", "actor")
-        .order_by("-created_at")
+        .order_by("-created_at", "-id")
     )
 
 
