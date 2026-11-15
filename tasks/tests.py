@@ -810,3 +810,45 @@ class TaskAdminTagValidationTests(TestCase):
         )
         self.assertTrue(item.is_completed)
 
+    def test_task_tag_admin_lifecycle(self):
+        from django.contrib.admin.sites import AdminSite
+
+        from tasks.admin import TaskTagAdmin
+
+        admin_site = AdminSite()
+        tag_admin = TaskTagAdmin(TaskTag, admin_site)
+
+        # Mock request with user
+        class DummyRequest:
+            user = self.owner
+
+        req = DummyRequest()
+        new_tag = TaskTag(workspace=self.workspace1, name="DevAdmin", color="#112233")
+        tag_admin.save_model(req, new_tag, None, change=False)
+
+        self.assertIsNotNone(new_tag.id)
+        self.assertEqual(new_tag.slug, "devadmin")
+        self.assertEqual(new_tag.name, "DevAdmin")
+
+        # Test delete via admin
+        tag_admin.delete_model(req, new_tag)
+        self.assertEqual(TaskTag.objects.filter(name="DevAdmin").count(), 0)
+
+    def test_create_with_unique_slug_savepoint_safety_under_atomic(self):
+        from django.db import transaction
+
+        from core.slugs import create_with_unique_slug
+
+        # Create tag with slug "qa"
+        create_task_tag(workspace=self.workspace1, name="qa", actor=self.owner)
+
+        with transaction.atomic():
+            tag2 = create_with_unique_slug(
+                model=TaskTag,
+                value="qa",
+                scope={"workspace": self.workspace1},
+                create_kwargs={"workspace": self.workspace1, "name": "qa2", "color": "#000000"},
+            )
+            self.assertEqual(tag2.slug, "qa-2")
+
+

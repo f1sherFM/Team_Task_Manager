@@ -14,7 +14,7 @@ def get_user_tasks(user) -> QuerySet[Task]:
     return (
         Task.objects.filter(project__workspace__memberships__user=user)
         .select_related("project", "project__workspace", "created_by", "assignee")
-        .prefetch_related("tags", "checklist_items")
+        .prefetch_related("tags__workspace", "checklist_items")
         .order_by("created_at", "id")
         .distinct()
     )
@@ -24,7 +24,7 @@ def get_project_tasks(*, project: Project) -> QuerySet[Task]:
     return (
         Task.objects.filter(project=project)
         .select_related("project", "project__workspace", "created_by", "assignee")
-        .prefetch_related("tags", "checklist_items")
+        .prefetch_related("tags__workspace", "checklist_items")
         .order_by("created_at", "id")
     )
 

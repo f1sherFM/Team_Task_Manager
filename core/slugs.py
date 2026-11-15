@@ -1,4 +1,4 @@
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.utils.text import slugify
 
 
@@ -44,7 +44,8 @@ def create_with_unique_slug(
             scope=scope,
         )
         try:
-            return model.objects.create(**create_kwargs, **{slug_field: slug})
+            with transaction.atomic():
+                return model.objects.create(**create_kwargs, **{slug_field: slug})
         except IntegrityError as exc:
             last_error = exc
 
