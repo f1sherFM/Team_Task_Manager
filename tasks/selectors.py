@@ -4,7 +4,8 @@ from django.utils import timezone
 
 from core.selectors import parse_bool_query, parse_date_query
 from projects.models import Project
-from tasks.models import Task
+from tasks.models import Task, TaskChecklistItem, TaskTag
+from workspaces.models import Workspace
 
 User = get_user_model()
 
@@ -13,6 +14,7 @@ def get_user_tasks(user) -> QuerySet[Task]:
     return (
         Task.objects.filter(project__workspace__memberships__user=user)
         .select_related("project", "project__workspace", "created_by", "assignee")
+        .prefetch_related("tags", "checklist_items")
         .order_by("created_at", "id")
         .distinct()
     )
@@ -22,6 +24,7 @@ def get_project_tasks(*, project: Project) -> QuerySet[Task]:
     return (
         Task.objects.filter(project=project)
         .select_related("project", "project__workspace", "created_by", "assignee")
+        .prefetch_related("tags", "checklist_items")
         .order_by("created_at", "id")
     )
 
@@ -48,6 +51,26 @@ def get_project_task_candidates(*, project: Project) -> QuerySet[User]:
     )
 
 
+def get_workspace_tags(*, workspace: Workspace) -> QuerySet[TaskTag]:
+    return TaskTag.objects.filter(workspace=workspace).order_by("name", "id")
+
+
+def get_workspace_tag_by_slug(*, workspace: Workspace, slug: str) -> TaskTag:
+    return get_workspace_tags(workspace=workspace).get(slug=slug)
+
+
+def get_workspace_tag_by_id(*, workspace: Workspace, tag_id: int) -> TaskTag:
+    return get_workspace_tags(workspace=workspace).get(id=tag_id)
+
+
+def get_task_checklist_items(*, task: Task) -> QuerySet[TaskChecklistItem]:
+    return task.checklist_items.order_by("position", "id")
+
+
+def get_task_checklist_item_by_id(*, task: Task, item_id: int) -> TaskChecklistItem:
+    return task.checklist_items.get(id=item_id)
+
+
 def filter_tasks(
     queryset: QuerySet[Task],
     *,
@@ -60,6 +83,8 @@ def filter_tasks(
     due_before: str | None = None,
     due_after: str | None = None,
     is_overdue: str | None = None,
+    is_archived: bool | None = None,
+    tag_slug: str | None = None,
     search: str | None = None,
 ) -> QuerySet[Task]:
     if workspace_slug:
@@ -74,6 +99,10 @@ def filter_tasks(
         queryset = queryset.filter(assignee_id=assignee_id)
     if created_by_id:
         queryset = queryset.filter(created_by_id=created_by_id)
+    if is_archived is not None:
+        queryset = queryset.filter(is_archived=is_archived)
+    if tag_slug:
+        queryset = queryset.filter(tags__slug=tag_slug)
 
     parsed_due_before = parse_date_query(due_before, param_name="due_before")
     parsed_due_after = parse_date_query(due_after, param_name="due_after")

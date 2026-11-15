@@ -9,9 +9,25 @@ from core.exceptions import DomainError
 from projects.models import Project
 from projects.selectors import get_workspace_project_by_slug
 from projects.services import archive_project, create_project, unarchive_project
-from tasks.models import Task
-from tasks.selectors import get_project_task_by_slug
-from tasks.services import UNSET, bulk_update_tasks, create_task, update_task
+from tasks.models import Task, TaskChecklistItem, TaskTag
+from tasks.selectors import (
+    get_project_task_by_slug,
+    get_workspace_tags,
+)
+from tasks.services import (
+    UNSET,
+    add_checklist_item,
+    archive_task,
+    bulk_update_tasks,
+    create_task,
+    create_task_tag,
+    reorder_checklist_items,
+    restore_task,
+    set_task_tags,
+    update_checklist_item,
+    update_task,
+    update_task_tag,
+)
 from workspaces.models import Invitation, Membership, Workspace
 from workspaces.selectors import (
     get_invitation_by_token,
@@ -83,6 +99,112 @@ class ProjectSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"detail": str(exc)}) from exc
 
 
+class TaskTagSerializer(serializers.ModelSerializer):
+    workspace = serializers.CharField(source="workspace.slug", read_only=True)
+
+    class Meta:
+        model = TaskTag
+        fields = ("id", "name", "slug", "color", "workspace", "created_at")
+        read_only_fields = ("id", "slug", "workspace", "created_at")
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        workspace = self.context["workspace"]
+        try:
+            return create_task_tag(
+                workspace=workspace,
+                name=validated_data["name"],
+                color=validated_data.get("color", "#6c757d"),
+                actor=request.user,
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+    def update(self, instance, validated_data):
+        request = self.context["request"]
+        try:
+            return update_task_tag(
+                tag=instance,
+                actor=request.user,
+                name=validated_data.get("name", UNSET),
+                color=validated_data.get("color", UNSET),
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+
+class TaskChecklistItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TaskChecklistItem
+        fields = ("id", "text", "is_completed", "position", "created_at", "updated_at")
+        read_only_fields = ("id", "position", "created_at", "updated_at")
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        task = self.context["task"]
+        try:
+            return add_checklist_item(
+                task=task,
+                text=validated_data["text"],
+                actor=request.user,
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+    def update(self, instance, validated_data):
+        request = self.context["request"]
+        try:
+            return update_checklist_item(
+                item=instance,
+                actor=request.user,
+                text=validated_data.get("text", UNSET),
+                is_completed=validated_data.get("is_completed", UNSET),
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+
+class TaskChecklistReorderSerializer(serializers.Serializer):
+    item_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        allow_empty=False,
+    )
+
+    def save(self, **kwargs):
+        request = self.context["request"]
+        task = self.context["task"]
+        try:
+            return reorder_checklist_items(
+                task=task,
+                item_ids=self.validated_data["item_ids"],
+                actor=request.user,
+            )
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+
+class TaskArchiveSerializer(serializers.Serializer):
+    slug = serializers.CharField(read_only=True)
+    is_archived = serializers.BooleanField(read_only=True)
+
+    def create(self, validated_data):
+        request = self.context["request"]
+        task = self.context["task"]
+        action = self.context["action"]
+        try:
+            if action == "archive":
+                return archive_task(task=task, actor=request.user)
+            return restore_task(task=task, actor=request.user)
+        except DomainError as exc:
+            raise serializers.ValidationError({"detail": str(exc)}) from exc
+
+    def to_representation(self, instance):
+        return {
+            "slug": instance.slug,
+            "is_archived": instance.is_archived,
+        }
+
+
 class TaskSerializer(serializers.ModelSerializer):
     workspace_slug = serializers.SlugField(write_only=True, required=False)
     project_slug = serializers.SlugField(write_only=True, required=False)
@@ -90,6 +212,14 @@ class TaskSerializer(serializers.ModelSerializer):
     created_by = serializers.CharField(source="created_by.username", read_only=True)
     assignee = serializers.CharField(source="assignee.username", read_only=True)
     assignee_id = serializers.IntegerField(write_only=True, required=False, allow_null=True)
+    tags = TaskTagSerializer(many=True, read_only=True)
+    tag_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        write_only=True,
+        required=False,
+    )
+    checklist_items = TaskChecklistItemSerializer(many=True, read_only=True)
+    is_archived = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Task
@@ -106,17 +236,37 @@ class TaskSerializer(serializers.ModelSerializer):
             "assignee",
             "assignee_id",
             "due_date",
+            "is_archived",
+            "tags",
+            "tag_ids",
+            "checklist_items",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("slug", "project", "created_by", "assignee", "created_at", "updated_at")
+        read_only_fields = (
+            "slug",
+            "project",
+            "created_by",
+            "assignee",
+            "is_archived",
+            "created_at",
+            "updated_at",
+        )
 
     def validate(self, attrs):
         attrs = super().validate(attrs)
         if self.instance is None:
             return attrs
 
-        allowed_fields = {"title", "description", "priority", "due_date", "status", "assignee_id"}
+        allowed_fields = {
+            "title",
+            "description",
+            "priority",
+            "due_date",
+            "status",
+            "assignee_id",
+            "tag_ids",
+        }
         invalid_fields = set(self.initial_data) - allowed_fields
         if invalid_fields:
             raise serializers.ValidationError(
@@ -135,6 +285,7 @@ class TaskSerializer(serializers.ModelSerializer):
                 {"detail": "Both workspace_slug and project_slug are required."}
             )
         assignee_id = validated_data.pop("assignee_id", None)
+        tag_ids = validated_data.pop("tag_ids", None)
         request = self.context["request"]
         try:
             project = get_workspace_project_by_slug(
@@ -143,6 +294,11 @@ class TaskSerializer(serializers.ModelSerializer):
                 user=request.user,
             )
             assignee = User.objects.filter(id=assignee_id).first() if assignee_id else None
+            tags = None
+            if tag_ids:
+                tags = list(get_workspace_tags(workspace=project.workspace).filter(id__in=tag_ids))
+                if len(tags) != len(tag_ids):
+                    raise DomainError("One or more tag IDs are invalid for this workspace.")
             return create_task(
                 project=project,
                 created_by=request.user,
@@ -151,6 +307,7 @@ class TaskSerializer(serializers.ModelSerializer):
                 description=validated_data.get("description", ""),
                 priority=validated_data["priority"],
                 due_date=validated_data.get("due_date"),
+                tags=tags,
             )
         except (Project.DoesNotExist, DomainError) as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc
@@ -158,11 +315,12 @@ class TaskSerializer(serializers.ModelSerializer):
     def update(self, instance, validated_data):
         request = self.context["request"]
         assignee_id = validated_data.pop("assignee_id", UNSET)
+        tag_ids = validated_data.pop("tag_ids", UNSET)
         try:
             assignee = UNSET
             if assignee_id is not UNSET:
                 assignee = User.objects.filter(id=assignee_id).first() if assignee_id else None
-            return update_task(
+            task = update_task(
                 task=instance,
                 actor=request.user,
                 title=validated_data.get("title", UNSET),
@@ -172,6 +330,14 @@ class TaskSerializer(serializers.ModelSerializer):
                 assignee=assignee,
                 status=validated_data.get("status", UNSET),
             )
+            if tag_ids is not UNSET:
+                tags = list(
+                    get_workspace_tags(workspace=task.project.workspace).filter(id__in=tag_ids)
+                )
+                if len(tags) != len(tag_ids):
+                    raise DomainError("One or more tag IDs are invalid for this workspace.")
+                task = set_task_tags(task=task, tags=tags, actor=request.user)
+            return task
         except DomainError as exc:
             raise serializers.ValidationError({"detail": str(exc)}) from exc
 

@@ -11,10 +11,13 @@ from api.permissions import (
     MembershipManagementPermission,
     ProjectArchivePermission,
     ProjectPermission,
+    TaskArchivePermission,
+    TaskChecklistPermission,
     TaskPermission,
     WorkspaceInvitationPermission,
     WorkspaceOwnershipTransferPermission,
     WorkspacePermission,
+    WorkspaceTagPermission,
 )
 from api.serializers import (
     ActivityLogSerializer,
@@ -25,8 +28,12 @@ from api.serializers import (
     MembershipSerializer,
     ProjectArchiveSerializer,
     ProjectSerializer,
+    TaskArchiveSerializer,
     TaskBulkUpdateSerializer,
+    TaskChecklistItemSerializer,
+    TaskChecklistReorderSerializer,
     TaskSerializer,
+    TaskTagSerializer,
     WorkspaceOwnershipTransferSerializer,
     WorkspaceSerializer,
 )
@@ -37,8 +44,21 @@ from core.exceptions import DomainError
 from core.selectors import parse_bool_query
 from projects.models import Project
 from projects.selectors import filter_projects, get_workspace_project_by_slug
-from tasks.models import Task
-from tasks.selectors import filter_tasks, get_project_task_by_slug
+from tasks.models import Task, TaskChecklistItem, TaskTag
+from tasks.selectors import (
+    filter_tasks,
+    get_project_task_by_slug,
+    get_task_checklist_item_by_id,
+    get_task_checklist_items,
+    get_workspace_tag_by_id,
+    get_workspace_tags,
+)
+from tasks.services import (
+    delete_checklist_item,
+    delete_task,
+    delete_task_tag,
+    toggle_checklist_item,
+)
 from workspaces.models import Invitation, Membership, Workspace
 from workspaces.selectors import (
     get_invitation_by_token,
@@ -377,7 +397,7 @@ class ProjectUnarchiveAPIView(ProjectArchiveAPIView):
     action = "unarchive"
 
 
-class TaskDetailAPIView(generics.RetrieveUpdateAPIView):
+class TaskDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TaskSerializer
     permission_classes = [TaskPermission]
 
@@ -393,6 +413,230 @@ class TaskDetailAPIView(generics.RetrieveUpdateAPIView):
             raise Http404("Task not found.") from exc
         self.check_object_permissions(self.request, task)
         return task
+
+    def perform_destroy(self, instance):
+        try:
+            delete_task(task=instance, actor=self.request.user)
+        except DomainError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+
+
+class WorkspaceTagListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = TaskTagSerializer
+    permission_classes = [WorkspaceTagPermission]
+
+    def get_workspace(self):
+        try:
+            workspace = get_user_workspace_by_slug(
+                slug=self.kwargs["slug"],
+                user=self.request.user,
+            )
+        except Workspace.DoesNotExist as exc:
+            raise Http404("Workspace not found.") from exc
+        self.check_object_permissions(self.request, workspace)
+        return workspace
+
+    def get_queryset(self):
+        return get_workspace_tags(workspace=self.get_workspace())
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["workspace"] = self.get_workspace()
+        return context
+
+
+class WorkspaceTagDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = TaskTagSerializer
+    permission_classes = [WorkspaceTagPermission]
+
+    def get_workspace(self):
+        try:
+            workspace = get_user_workspace_by_slug(
+                slug=self.kwargs["slug"],
+                user=self.request.user,
+            )
+        except Workspace.DoesNotExist as exc:
+            raise Http404("Workspace not found.") from exc
+        return workspace
+
+    def get_object(self):
+        workspace = self.get_workspace()
+        try:
+            tag = get_workspace_tag_by_id(
+                workspace=workspace,
+                tag_id=self.kwargs["tag_id"],
+            )
+        except TaskTag.DoesNotExist as exc:
+            raise Http404("Tag not found.") from exc
+        self.check_object_permissions(self.request, tag)
+        return tag
+
+    def perform_destroy(self, instance):
+        try:
+            delete_task_tag(tag=instance, actor=self.request.user)
+        except DomainError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+
+
+class TaskChecklistListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = TaskChecklistItemSerializer
+    permission_classes = [TaskChecklistPermission]
+
+    def get_task(self):
+        try:
+            task = get_project_task_by_slug(
+                workspace_slug=self.kwargs["workspace_slug"],
+                project_slug=self.kwargs["project_slug"],
+                task_slug=self.kwargs["task_slug"],
+                user=self.request.user,
+            )
+        except Task.DoesNotExist as exc:
+            raise Http404("Task not found.") from exc
+        self.check_object_permissions(self.request, task)
+        return task
+
+    def get_queryset(self):
+        return get_task_checklist_items(task=self.get_task())
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["task"] = self.get_task()
+        return context
+
+
+class TaskChecklistItemDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = TaskChecklistItemSerializer
+    permission_classes = [TaskChecklistPermission]
+
+    def get_task(self):
+        try:
+            task = get_project_task_by_slug(
+                workspace_slug=self.kwargs["workspace_slug"],
+                project_slug=self.kwargs["project_slug"],
+                task_slug=self.kwargs["task_slug"],
+                user=self.request.user,
+            )
+        except Task.DoesNotExist as exc:
+            raise Http404("Task not found.") from exc
+        return task
+
+    def get_object(self):
+        task = self.get_task()
+        try:
+            item = get_task_checklist_item_by_id(
+                task=task,
+                item_id=self.kwargs["item_id"],
+            )
+        except TaskChecklistItem.DoesNotExist as exc:
+            raise Http404("Checklist item not found.") from exc
+        self.check_object_permissions(self.request, item)
+        return item
+
+    def perform_destroy(self, instance):
+        try:
+            delete_checklist_item(item=instance, actor=self.request.user)
+        except DomainError as exc:
+            raise ValidationError({"detail": str(exc)}) from exc
+
+
+class TaskChecklistItemToggleAPIView(generics.GenericAPIView):
+    serializer_class = TaskChecklistItemSerializer
+    permission_classes = [TaskChecklistPermission]
+
+    def get_task(self):
+        try:
+            task = get_project_task_by_slug(
+                workspace_slug=self.kwargs["workspace_slug"],
+                project_slug=self.kwargs["project_slug"],
+                task_slug=self.kwargs["task_slug"],
+                user=self.request.user,
+            )
+        except Task.DoesNotExist as exc:
+            raise Http404("Task not found.") from exc
+        return task
+
+    def post(self, request, *args, **kwargs):
+        task = self.get_task()
+        try:
+            item = get_task_checklist_item_by_id(
+                task=task,
+                item_id=self.kwargs["item_id"],
+            )
+        except TaskChecklistItem.DoesNotExist as exc:
+            raise Http404("Checklist item not found.") from exc
+        self.check_object_permissions(self.request, item)
+        try:
+            updated_item = toggle_checklist_item(item=item, actor=request.user)
+        except DomainError as exc:
+            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(self.get_serializer(updated_item).data, status=status.HTTP_200_OK)
+
+
+class TaskChecklistReorderAPIView(generics.CreateAPIView):
+    serializer_class = TaskChecklistReorderSerializer
+    permission_classes = [TaskChecklistPermission]
+
+    def get_task(self):
+        try:
+            task = get_project_task_by_slug(
+                workspace_slug=self.kwargs["workspace_slug"],
+                project_slug=self.kwargs["project_slug"],
+                task_slug=self.kwargs["task_slug"],
+                user=self.request.user,
+            )
+        except Task.DoesNotExist as exc:
+            raise Http404("Task not found.") from exc
+        self.check_object_permissions(self.request, task)
+        return task
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["task"] = self.get_task()
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        items = serializer.save()
+        return Response(
+            TaskChecklistItemSerializer(items, many=True).data,
+            status=status.HTTP_200_OK,
+        )
+
+
+class TaskArchiveAPIView(generics.CreateAPIView):
+    serializer_class = TaskArchiveSerializer
+    permission_classes = [TaskArchivePermission]
+    action = "archive"
+
+    def get_task(self):
+        try:
+            task = get_project_task_by_slug(
+                workspace_slug=self.kwargs["workspace_slug"],
+                project_slug=self.kwargs["project_slug"],
+                task_slug=self.kwargs["task_slug"],
+                user=self.request.user,
+            )
+        except Task.DoesNotExist as exc:
+            raise Http404("Task not found.") from exc
+        self.check_object_permissions(self.request, task)
+        return task
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["task"] = self.get_task()
+        context["action"] = self.action
+        return context
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data={})
+        serializer.is_valid(raise_exception=True)
+        task = serializer.save()
+        return Response(serializer.to_representation(task), status=status.HTTP_200_OK)
+
+
+class TaskRestoreAPIView(TaskArchiveAPIView):
+    action = "restore"
 
 
 class TaskBulkUpdateAPIView(generics.CreateAPIView):

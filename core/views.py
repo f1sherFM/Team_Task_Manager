@@ -41,7 +41,9 @@ class EcosystemSummaryView(LoginRequiredMixin, View):
         today = timezone.localdate()
         user_workspaces = get_user_workspaces(request.user)
         active_projects = get_user_projects(request.user).filter(is_archived=False)
-        open_tasks = get_user_tasks(request.user).exclude(status=TaskStatus.DONE)
+        open_tasks = (
+            get_user_tasks(request.user).filter(is_archived=False).exclude(status=TaskStatus.DONE)
+        )
         overdue_tasks = open_tasks.filter(due_date__lt=today)
         user_invites = Invitation.objects.filter(
             workspace__in=user_workspaces, accepted_at__isnull=True

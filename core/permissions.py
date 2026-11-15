@@ -78,6 +78,10 @@ def is_project_writable(project) -> bool:
     return not project.is_archived
 
 
+def is_task_writable(task) -> bool:
+    return is_project_writable(task.project) and not getattr(task, "is_archived", False)
+
+
 def can_create_task(*, project, user) -> bool:
     return can_view_project(project=project, user=user) and is_project_writable(project)
 
@@ -87,18 +91,17 @@ def can_view_task(*, task, user) -> bool:
 
 
 def can_update_task(*, task, user) -> bool:
-    return can_view_task(task=task, user=user) and is_project_writable(task.project)
+    return can_view_task(task=task, user=user) and is_task_writable(task)
 
 
 def can_assign_task(*, task, user) -> bool:
-    return can_manage_workspace(
-        workspace=task.project.workspace,
-        user=user,
-    ) and is_project_writable(task.project)
+    return can_manage_workspace(workspace=task.project.workspace, user=user) and is_task_writable(
+        task
+    )
 
 
 def can_change_task_status(*, task, user) -> bool:
-    if not is_project_writable(task.project):
+    if not is_task_writable(task):
         return False
 
     if can_manage_workspace(workspace=task.project.workspace, user=user):
@@ -107,12 +110,50 @@ def can_change_task_status(*, task, user) -> bool:
     return getattr(task.assignee, "id", None) == getattr(user, "id", None)
 
 
+def can_delete_task(*, task, user) -> bool:
+    if not is_project_writable(task.project):
+        return False
+
+    if can_manage_workspace(workspace=task.project.workspace, user=user):
+        return True
+
+    return getattr(task.created_by, "id", None) == getattr(user, "id", None)
+
+
+def can_archive_task(*, task, user) -> bool:
+    if not is_project_writable(task.project):
+        return False
+
+    if can_manage_workspace(workspace=task.project.workspace, user=user):
+        return True
+
+    return getattr(task.created_by, "id", None) == getattr(user, "id", None) or getattr(
+        task.assignee, "id", None
+    ) == getattr(user, "id", None)
+
+
+def can_restore_task(*, task, user) -> bool:
+    return can_archive_task(task=task, user=user)
+
+
+def can_view_tags(*, workspace, user) -> bool:
+    return can_view_workspace(workspace=workspace, user=user)
+
+
+def can_manage_tags(*, workspace, user) -> bool:
+    return can_manage_workspace(workspace=workspace, user=user)
+
+
+def can_manage_checklist(*, task, user) -> bool:
+    return can_update_task(task=task, user=user)
+
+
 def can_create_comment(*, task, user) -> bool:
-    return can_view_task(task=task, user=user) and is_project_writable(task.project)
+    return can_view_task(task=task, user=user) and is_task_writable(task)
 
 
 def can_delete_comment(*, comment, user) -> bool:
-    if not is_project_writable(comment.task.project):
+    if not is_task_writable(comment.task):
         return False
 
     if can_manage_workspace(workspace=comment.task.project.workspace, user=user):

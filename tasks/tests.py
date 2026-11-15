@@ -1,10 +1,39 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from activity.models import ActivityLog
+from comments.models import Comment
+from comments.services import add_comment
 from core.exceptions import DomainError
+from core.integrity import check_checklist_item_integrity, check_task_tag_workspace_integrity
 from projects.services import archive_project, create_project
-from tasks.models import TaskStatus
-from tasks.services import assign_task, bulk_update_tasks, change_task_status, create_task
+from tasks.models import Task, TaskChecklistItem, TaskStatus, TaskTag
+from tasks.selectors import (
+    get_task_checklist_items,
+    get_workspace_tag_by_id,
+    get_workspace_tag_by_slug,
+    get_workspace_tags,
+)
+from tasks.services import (
+    add_checklist_item,
+    archive_task,
+    assign_tag_to_task,
+    assign_task,
+    bulk_update_tasks,
+    change_task_status,
+    create_task,
+    create_task_tag,
+    delete_checklist_item,
+    delete_task,
+    delete_task_tag,
+    remove_tag_from_task,
+    reorder_checklist_items,
+    restore_task,
+    set_task_tags,
+    toggle_checklist_item,
+    update_checklist_item,
+    update_task_tag,
+)
 from workspaces.models import Membership, MembershipRole
 from workspaces.services import create_workspace
 
@@ -289,3 +318,372 @@ class ProjectTaskListViewPaginationTests(TestCase):
         self.assertEqual(response_p2.status_code, 200)
         self.assertEqual(len(response_p2.context["tasks"]), 5)
 
+
+class TaskTagServiceAndSelectorTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="tag_owner", password="secret123")
+        self.admin = User.objects.create_user(username="tag_admin", password="secret123")
+        self.member = User.objects.create_user(username="tag_member", password="secret123")
+        self.outsider = User.objects.create_user(username="tag_outsider", password="secret123")
+
+        self.workspace = create_workspace(owner=self.owner, name="Tag WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.admin, role=MembershipRole.ADMIN
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+
+        self.other_workspace = create_workspace(owner=self.outsider, name="Other WS")
+
+    def test_owner_and_admin_can_create_tag(self):
+        tag1 = create_task_tag(
+            workspace=self.workspace, name="Bug", color="#ff0000", actor=self.owner
+        )
+        self.assertEqual(tag1.name, "Bug")
+        self.assertEqual(tag1.slug, "bug")
+        self.assertEqual(tag1.color, "#ff0000")
+
+        tag2 = create_task_tag(
+            workspace=self.workspace, name="Feature", color="#00ff00", actor=self.admin
+        )
+        self.assertEqual(tag2.name, "Feature")
+        self.assertEqual(tag2.slug, "feature")
+
+    def test_member_and_outsider_cannot_create_tag(self):
+        with self.assertRaises(DomainError):
+            create_task_tag(workspace=self.workspace, name="Docs", actor=self.member)
+
+        with self.assertRaises(DomainError):
+            create_task_tag(workspace=self.workspace, name="Docs", actor=self.outsider)
+
+    def test_tag_name_case_insensitive_unique_within_workspace(self):
+        create_task_tag(workspace=self.workspace, name="Frontend", actor=self.owner)
+        with self.assertRaises(DomainError):
+            create_task_tag(workspace=self.workspace, name="frontend", actor=self.owner)
+
+    def test_same_tag_name_allowed_in_different_workspaces(self):
+        tag1 = create_task_tag(workspace=self.workspace, name="Design", actor=self.owner)
+        tag2 = create_task_tag(workspace=self.other_workspace, name="Design", actor=self.outsider)
+        self.assertEqual(tag1.name, tag2.name)
+        self.assertNotEqual(tag1.workspace, tag2.workspace)
+
+    def test_hex_color_validation(self):
+        with self.assertRaises(DomainError):
+            create_task_tag(
+                workspace=self.workspace, name="BadColor", color="not-a-color", actor=self.owner
+            )
+
+        with self.assertRaises(DomainError):
+            create_task_tag(
+                workspace=self.workspace, name="BadHex", color="#gggggg", actor=self.owner
+            )
+
+        tag = create_task_tag(
+            workspace=self.workspace, name="ValidHex", color="#ABC", actor=self.owner
+        )
+        self.assertEqual(tag.color, "#abc")
+
+    def test_update_and_delete_tag(self):
+        tag = create_task_tag(
+            workspace=self.workspace, name="Initial", color="#111111", actor=self.owner
+        )
+        updated = update_task_tag(tag=tag, actor=self.admin, name="Renamed", color="#222222")
+        self.assertEqual(updated.name, "Renamed")
+        self.assertEqual(updated.color, "#222222")
+
+        delete_task_tag(tag=updated, actor=self.admin)
+        self.assertEqual(TaskTag.objects.filter(id=tag.id).count(), 0)
+
+    def test_tag_selectors(self):
+        t1 = create_task_tag(workspace=self.workspace, name="Alpha", actor=self.owner)
+        t2 = create_task_tag(workspace=self.workspace, name="Beta", actor=self.owner)
+
+        tags = list(get_workspace_tags(workspace=self.workspace))
+        self.assertEqual(tags, [t1, t2])
+        self.assertEqual(get_workspace_tag_by_slug(workspace=self.workspace, slug="alpha"), t1)
+        self.assertEqual(get_workspace_tag_by_id(workspace=self.workspace, tag_id=t2.id), t2)
+
+
+class TaskTagAssignmentTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="assign_owner", password="secret123")
+        self.member = User.objects.create_user(username="assign_member", password="secret123")
+        self.outsider = User.objects.create_user(username="assign_outsider", password="secret123")
+
+        self.workspace = create_workspace(owner=self.owner, name="Tag Assignment WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+        self.project = create_project(
+            workspace=self.workspace, name="Main", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Tagged Task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+        self.other_ws = create_workspace(owner=self.outsider, name="Other WS")
+        self.foreign_tag = create_task_tag(
+            workspace=self.other_ws, name="Foreign", actor=self.outsider
+        )
+        self.tag1 = create_task_tag(workspace=self.workspace, name="Tag1", actor=self.owner)
+        self.tag2 = create_task_tag(workspace=self.workspace, name="Tag2", actor=self.owner)
+
+    def test_member_can_assign_and_remove_tag(self):
+        assign_tag_to_task(task=self.task, tag=self.tag1, actor=self.member)
+        self.assertIn(self.tag1, self.task.tags.all())
+
+        set_task_tags(task=self.task, tags=[self.tag1, self.tag2], actor=self.member)
+        self.assertEqual(set(self.task.tags.all()), {self.tag1, self.tag2})
+
+        remove_tag_from_task(task=self.task, tag=self.tag1, actor=self.member)
+        self.assertEqual(list(self.task.tags.all()), [self.tag2])
+
+    def test_cannot_assign_foreign_workspace_tag(self):
+        with self.assertRaises(DomainError):
+            assign_tag_to_task(task=self.task, tag=self.foreign_tag, actor=self.member)
+
+        with self.assertRaises(DomainError):
+            set_task_tags(task=self.task, tags=[self.tag1, self.foreign_tag], actor=self.member)
+
+        with self.assertRaises(DomainError):
+            create_task(
+                project=self.project,
+                title="Cross-tagged Task",
+                description="",
+                priority="low",
+                due_date=None,
+                assignee=None,
+                created_by=self.member,
+                tags=[self.foreign_tag],
+            )
+
+
+class TaskChecklistServiceAndSelectorTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="cl_owner", password="secret123")
+        self.member = User.objects.create_user(username="cl_member", password="secret123")
+        self.outsider = User.objects.create_user(username="cl_outsider", password="secret123")
+
+        self.workspace = create_workspace(owner=self.owner, name="Checklist WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+        self.project = create_project(
+            workspace=self.workspace, name="Dev", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Checklist Task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+    def test_add_and_toggle_checklist_item(self):
+        item = add_checklist_item(task=self.task, text="Write migrations", actor=self.member)
+        self.assertEqual(item.text, "Write migrations")
+        self.assertFalse(item.is_completed)
+        self.assertEqual(item.position, 0)
+
+        toggled = toggle_checklist_item(item=item, actor=self.member)
+        self.assertTrue(toggled.is_completed)
+
+        update_checklist_item(item=item, actor=self.member, text="Updated text", is_completed=False)
+        item.refresh_from_db()
+        self.assertEqual(item.text, "Updated text")
+        self.assertFalse(item.is_completed)
+
+    def test_empty_checklist_item_text_rejected(self):
+        with self.assertRaises(DomainError):
+            add_checklist_item(task=self.task, text="   ", actor=self.member)
+
+    def test_outsider_cannot_modify_checklist(self):
+        with self.assertRaises(DomainError):
+            add_checklist_item(task=self.task, text="Hacked item", actor=self.outsider)
+
+    def test_delete_checklist_item_renormalizes_positions(self):
+        item1 = add_checklist_item(task=self.task, text="Item 1", actor=self.member)
+        item2 = add_checklist_item(task=self.task, text="Item 2", actor=self.member)
+        item3 = add_checklist_item(task=self.task, text="Item 3", actor=self.member)
+
+        delete_checklist_item(item=item2, actor=self.member)
+        items = list(get_task_checklist_items(task=self.task))
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].id, item1.id)
+        self.assertEqual(items[0].position, 0)
+        self.assertEqual(items[1].id, item3.id)
+        self.assertEqual(items[1].position, 1)
+
+    def test_reorder_checklist_items(self):
+        item1 = add_checklist_item(task=self.task, text="Step 1", actor=self.member)
+        item2 = add_checklist_item(task=self.task, text="Step 2", actor=self.member)
+        item3 = add_checklist_item(task=self.task, text="Step 3", actor=self.member)
+
+        reordered = reorder_checklist_items(
+            task=self.task, item_ids=[item3.id, item1.id, item2.id], actor=self.member
+        )
+        self.assertEqual([i.id for i in reordered], [item3.id, item1.id, item2.id])
+        self.assertEqual([i.position for i in reordered], [0, 1, 2])
+
+    def test_invalid_reorder_rejected(self):
+        item1 = add_checklist_item(task=self.task, text="Step 1", actor=self.member)
+        add_checklist_item(task=self.task, text="Step 2", actor=self.member)
+
+        with self.assertRaises(DomainError):
+            reorder_checklist_items(task=self.task, item_ids=[item1.id, 9999], actor=self.member)
+
+
+class TaskLifecycleAndArchivalTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="life_owner", password="secret123")
+        self.admin = User.objects.create_user(username="life_admin", password="secret123")
+        self.member = User.objects.create_user(username="life_member", password="secret123")
+        self.outsider = User.objects.create_user(username="life_outsider", password="secret123")
+
+        self.workspace = create_workspace(owner=self.owner, name="Lifecycle WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.admin, role=MembershipRole.ADMIN
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+        self.project = create_project(
+            workspace=self.workspace, name="Prod", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Lifecycle Task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+    def test_archive_and_restore_task(self):
+        archived = archive_task(task=self.task, actor=self.member)
+        self.assertTrue(archived.is_archived)
+
+        with self.assertRaises(DomainError):
+            change_task_status(task=archived, status="done", actor=self.owner)
+
+        restored = restore_task(task=archived, actor=self.admin)
+        self.assertFalse(restored.is_archived)
+
+    def test_cannot_modify_tasks_in_archived_project(self):
+        archive_project(project=self.project, actor=self.owner)
+
+        with self.assertRaises(DomainError):
+            archive_task(task=self.task, actor=self.owner)
+
+        with self.assertRaises(DomainError):
+            create_task(
+                project=self.project,
+                title="New Task in Archived Project",
+                description="",
+                priority="low",
+                due_date=None,
+                assignee=None,
+                created_by=self.member,
+            )
+
+
+class TaskDeletionAndAuditTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="del_owner", password="secret123")
+        self.admin = User.objects.create_user(username="del_admin", password="secret123")
+        self.member = User.objects.create_user(username="del_member", password="secret123")
+        self.other_member = User.objects.create_user(username="del_other", password="secret123")
+
+        self.workspace = create_workspace(owner=self.owner, name="Deletion WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.admin, role=MembershipRole.ADMIN
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.other_member, role=MembershipRole.MEMBER
+        )
+        self.project = create_project(
+            workspace=self.workspace, name="Del Project", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Task to delete",
+            description="Detailed description",
+            priority="high",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        self.comment = add_comment(task=self.task, author=self.member, text="A comment")
+        self.item = add_checklist_item(task=self.task, text="Item to delete", actor=self.member)
+
+    def test_random_member_cannot_delete_task(self):
+        with self.assertRaises(DomainError):
+            delete_task(task=self.task, actor=self.other_member)
+
+    def test_creator_can_delete_task_with_cascade_and_audit_preservation(self):
+        task_id = self.task.id
+        delete_task(task=self.task, actor=self.member)
+
+        self.assertEqual(Task.objects.filter(id=task_id).count(), 0)
+        self.assertEqual(Comment.objects.filter(id=self.comment.id).count(), 0)
+        self.assertEqual(TaskChecklistItem.objects.filter(id=self.item.id).count(), 0)
+
+        logs = ActivityLog.objects.filter(
+            workspace=self.workspace, target_type="task", target_id=str(task_id)
+        )
+        self.assertTrue(logs.filter(action="task_created").exists())
+        self.assertTrue(logs.filter(action="task_deleted").exists())
+        del_log = logs.get(action="task_deleted")
+        self.assertEqual(del_log.metadata["task_title"], "Task to delete")
+        self.assertEqual(del_log.metadata["comments_deleted"], 1)
+        self.assertEqual(del_log.metadata["checklist_items_deleted"], 1)
+
+    def test_admin_can_delete_task(self):
+        delete_task(task=self.task, actor=self.admin)
+        self.assertEqual(Task.objects.filter(id=self.task.id).count(), 0)
+
+
+class TaskIntegrityCheckTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="integ_owner", password="secret123")
+        self.workspace1 = create_workspace(owner=self.owner, name="Integ 1")
+        self.workspace2 = create_workspace(owner=self.owner, name="Integ 2")
+        self.project = create_project(
+            workspace=self.workspace1, name="Integ Proj", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Integ Task",
+            description="",
+            priority="low",
+            due_date=None,
+            assignee=None,
+            created_by=self.owner,
+        )
+
+    def test_integrity_detects_cross_workspace_tag(self):
+        tag_ws2 = TaskTag.objects.create(
+            workspace=self.workspace2, name="CrossTag", slug="cross-tag"
+        )
+        self.task.tags.add(tag_ws2)
+
+        issues = check_task_tag_workspace_integrity()
+        self.assertTrue(any("CrossTag" in issue or "cross-tag" in issue for issue in issues))
+
+    def test_integrity_detects_empty_checklist_item(self):
+        item = TaskChecklistItem.objects.create(task=self.task, text="", position=0)
+        issues = check_checklist_item_integrity()
+        self.assertTrue(any(str(item.id) in issue for issue in issues))

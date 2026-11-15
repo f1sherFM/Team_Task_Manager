@@ -10,8 +10,13 @@ from activity.services import log_activity
 from comments.services import add_comment
 from projects.models import Project
 from projects.services import archive_project, create_project
-from tasks.models import Task
-from tasks.services import assign_task, create_task
+from tasks.models import Task, TaskChecklistItem, TaskTag
+from tasks.services import (
+    add_checklist_item,
+    assign_task,
+    create_task,
+    create_task_tag,
+)
 from workspaces.models import Invitation, Membership, MembershipRole
 from workspaces.services import create_invitation, create_workspace
 
@@ -826,3 +831,249 @@ class ApiPermissionTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("task_slugs", response.data)
+
+
+class TaskTagAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(username="api_tag_owner", password="password123")
+        self.admin = User.objects.create_user(username="api_tag_admin", password="password123")
+        self.member = User.objects.create_user(username="api_tag_member", password="password123")
+        self.outsider = User.objects.create_user(
+            username="api_tag_outsider", password="password123"
+        )
+
+        self.workspace = create_workspace(owner=self.owner, name="Tag API WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.admin, role=MembershipRole.ADMIN
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+
+    def test_owner_can_list_and_create_tag(self):
+        self.client.force_authenticate(self.owner)
+        url = f"/api/workspaces/{self.workspace.slug}/tags/"
+
+        post_res = self.client.post(url, {"name": "Security", "color": "#ff0000"}, format="json")
+        self.assertEqual(post_res.status_code, 201)
+        self.assertEqual(post_res.data["name"], "Security")
+        self.assertEqual(post_res.data["slug"], "security")
+        self.assertEqual(post_res.data["color"], "#ff0000")
+
+        get_res = self.client.get(url)
+        self.assertEqual(get_res.status_code, 200)
+        self.assertEqual(get_res.data["count"], 1)
+        self.assertEqual(len(get_res.data["results"]), 1)
+
+    def test_member_can_list_but_cannot_create_tag(self):
+        create_task_tag(workspace=self.workspace, name="DevOps", actor=self.owner)
+        self.client.force_authenticate(self.member)
+        url = f"/api/workspaces/{self.workspace.slug}/tags/"
+
+        get_res = self.client.get(url)
+        self.assertEqual(get_res.status_code, 200)
+        self.assertEqual(get_res.data["count"], 1)
+        self.assertEqual(len(get_res.data["results"]), 1)
+
+        post_res = self.client.post(url, {"name": "QA", "color": "#123456"}, format="json")
+        self.assertEqual(post_res.status_code, 403)
+
+    def test_tag_detail_update_and_delete(self):
+        tag = create_task_tag(workspace=self.workspace, name="Backend", actor=self.owner)
+        self.client.force_authenticate(self.admin)
+        url = f"/api/workspaces/{self.workspace.slug}/tags/{tag.id}/"
+
+        patch_res = self.client.patch(
+            url, {"name": "Core Backend", "color": "#0000ff"}, format="json"
+        )
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["name"], "Core Backend")
+        self.assertEqual(patch_res.data["color"], "#0000ff")
+
+        del_res = self.client.delete(url)
+        self.assertEqual(del_res.status_code, 204)
+        self.assertEqual(TaskTag.objects.filter(id=tag.id).count(), 0)
+
+
+class TaskChecklistAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(username="api_cl_owner", password="password123")
+        self.member = User.objects.create_user(username="api_cl_member", password="password123")
+        self.outsider = User.objects.create_user(
+            username="api_cl_outsider", password="password123"
+        )
+
+        self.workspace = create_workspace(owner=self.owner, name="CL API WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+        self.project = create_project(
+            workspace=self.workspace, name="CL Project", description="", created_by=self.owner
+        )
+        self.task = create_task(
+            project=self.project,
+            title="CL Task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+    def test_checklist_crud_and_toggle(self):
+        self.client.force_authenticate(self.member)
+        ws_slug = self.workspace.slug
+        p_slug = self.project.slug
+        t_slug = self.task.slug
+        base_url = f"/api/workspaces/{ws_slug}/projects/{p_slug}/tasks/{t_slug}/checklist/"
+
+        # Create
+        create_res = self.client.post(base_url, {"text": "Step 1"}, format="json")
+        self.assertEqual(create_res.status_code, 201)
+        item_id = create_res.data["id"]
+        self.assertEqual(create_res.data["text"], "Step 1")
+        self.assertFalse(create_res.data["is_completed"])
+
+        # List
+        list_res = self.client.get(base_url)
+        self.assertEqual(list_res.status_code, 200)
+        self.assertEqual(list_res.data["count"], 1)
+        self.assertEqual(len(list_res.data["results"]), 1)
+
+        # Toggle
+        toggle_res = self.client.post(f"{base_url}{item_id}/toggle/")
+        self.assertEqual(toggle_res.status_code, 200)
+        self.assertTrue(toggle_res.data["is_completed"])
+
+        # Update
+        patch_res = self.client.patch(
+            f"{base_url}{item_id}/", {"text": "Step 1 revised"}, format="json"
+        )
+        self.assertEqual(patch_res.status_code, 200)
+        self.assertEqual(patch_res.data["text"], "Step 1 revised")
+
+        # Delete
+        del_res = self.client.delete(f"{base_url}{item_id}/")
+        self.assertEqual(del_res.status_code, 204)
+        self.assertEqual(TaskChecklistItem.objects.filter(id=item_id).count(), 0)
+
+    def test_checklist_reorder_api(self):
+        item1 = add_checklist_item(task=self.task, text="Item A", actor=self.member)
+        item2 = add_checklist_item(task=self.task, text="Item B", actor=self.member)
+        self.client.force_authenticate(self.member)
+        url = (
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/"
+            f"tasks/{self.task.slug}/checklist/reorder/"
+        )
+
+        response = self.client.post(url, {"item_ids": [item2.id, item1.id]}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([i["id"] for i in response.data], [item2.id, item1.id])
+
+
+class TaskLifecycleAndDeletionAPITests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.owner = User.objects.create_user(username="api_life_owner", password="password123")
+        self.member = User.objects.create_user(username="api_life_member", password="password123")
+        self.other_member = User.objects.create_user(
+            username="api_life_other", password="password123"
+        )
+
+        self.workspace = create_workspace(owner=self.owner, name="Life API WS")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.other_member, role=MembershipRole.MEMBER
+        )
+        self.project = create_project(
+            workspace=self.workspace, name="Life Project", description="", created_by=self.owner
+        )
+        self.tag = create_task_tag(workspace=self.workspace, name="Frontend", actor=self.owner)
+        self.task = create_task(
+            project=self.project,
+            title="Life Task",
+            description="",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+
+    def test_task_representation_includes_tags_checklist_and_archived(self):
+        self.client.force_authenticate(self.member)
+        url = (
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/"
+            f"tasks/{self.task.slug}/"
+        )
+
+        res = self.client.get(url)
+        self.assertEqual(res.status_code, 200)
+        self.assertIn("tags", res.data)
+        self.assertIn("checklist_items", res.data)
+        self.assertIn("is_archived", res.data)
+        self.assertFalse(res.data["is_archived"])
+
+    def test_archive_and_restore_api(self):
+        self.client.force_authenticate(self.member)
+        ws_slug = self.workspace.slug
+        p_slug = self.project.slug
+        t_slug = self.task.slug
+        archive_url = f"/api/workspaces/{ws_slug}/projects/{p_slug}/tasks/{t_slug}/archive/"
+        restore_url = f"/api/workspaces/{ws_slug}/projects/{p_slug}/tasks/{t_slug}/restore/"
+
+        arc_res = self.client.post(archive_url)
+        self.assertEqual(arc_res.status_code, 200)
+        self.assertTrue(arc_res.data["is_archived"])
+
+        res_res = self.client.post(restore_url)
+        self.assertEqual(res_res.status_code, 200)
+        self.assertFalse(res_res.data["is_archived"])
+
+    def test_task_delete_api(self):
+        task_to_del = create_task(
+            project=self.project,
+            title="Task for API Delete",
+            description="",
+            priority="low",
+            due_date=None,
+            assignee=None,
+            created_by=self.member,
+        )
+        url = (
+            f"/api/workspaces/{self.workspace.slug}/projects/{self.project.slug}/"
+            f"tasks/{task_to_del.slug}/"
+        )
+
+        # Other member cannot delete
+        self.client.force_authenticate(self.other_member)
+        del_res_other = self.client.delete(url)
+        self.assertEqual(del_res_other.status_code, 403)
+
+        # Creator can delete
+        self.client.force_authenticate(self.member)
+        del_res = self.client.delete(url)
+        self.assertEqual(del_res.status_code, 204)
+        self.assertEqual(Task.objects.filter(id=task_to_del.id).count(), 0)
+
+    def test_create_and_update_task_with_tag_ids(self):
+        self.client.force_authenticate(self.member)
+        url = "/api/tasks/"
+        res = self.client.post(
+            url,
+            {
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "title": "Tagged Task API",
+                "priority": "high",
+                "tag_ids": [self.tag.id],
+            },
+            format="json",
+        )
+        self.assertEqual(res.status_code, 201)
+        created_slug = res.data["slug"]
+        created_task = Task.objects.get(project=self.project, slug=created_slug)
+        self.assertIn(self.tag, created_task.tags.all())

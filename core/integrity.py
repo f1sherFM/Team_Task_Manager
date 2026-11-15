@@ -1,6 +1,6 @@
 from comments.models import Comment
 from projects.models import Project
-from tasks.models import Task
+from tasks.models import Task, TaskChecklistItem
 from workspaces.models import Invitation, Membership, MembershipRole, Workspace
 
 
@@ -13,6 +13,8 @@ def run_integrity_checks() -> list[str]:
     issues.extend(check_task_assignment_integrity())
     issues.extend(check_comment_author_integrity())
     issues.extend(check_deleted_comment_integrity())
+    issues.extend(check_task_tag_workspace_integrity())
+    issues.extend(check_checklist_item_integrity())
     return issues
 
 
@@ -154,4 +156,27 @@ def check_deleted_comment_integrity() -> list[str]:
     issues: list[str] = []
     for comment in Comment.objects.filter(is_deleted=True).exclude(text=""):
         issues.append(f"Deleted comment {comment.id} still has stored text.")
+    return issues
+
+
+def check_task_tag_workspace_integrity() -> list[str]:
+    issues: list[str] = []
+    tasks = Task.objects.prefetch_related("tags").select_related("project__workspace")
+    for task in tasks:
+        task_workspace_id = task.project.workspace_id
+        for tag in task.tags.all():
+            if tag.workspace_id != task_workspace_id:
+                issues.append(
+                    f"Task {task.slug} in workspace {task.project.workspace.slug} "
+                    f"has tag {tag.slug} from workspace ID {tag.workspace_id}."
+                )
+    return issues
+
+
+def check_checklist_item_integrity() -> list[str]:
+    issues: list[str] = []
+    items = TaskChecklistItem.objects.all()
+    for item in items:
+        if not item.text or not item.text.strip():
+            issues.append(f"Checklist item {item.id} has empty text.")
     return issues
