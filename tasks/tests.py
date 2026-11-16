@@ -151,6 +151,13 @@ class TaskServiceTests(TestCase):
             },
         )
 
+        if response.status_code != 302:
+            print(
+                "FORM_ERRORS:",
+                response.context["form"].errors,
+                "INLINE_ERRORS:",
+                [f.errors for f in response.context["inline_admin_formsets"][0].formset.forms],
+            )
         self.assertEqual(response.status_code, 302)
         task.refresh_from_db()
         self.assertEqual(task.title, "Updated endpoint")
@@ -850,5 +857,282 @@ class TaskAdminTagValidationTests(TestCase):
                 create_kwargs={"workspace": self.workspace1, "name": "qa2", "color": "#000000"},
             )
             self.assertEqual(tag2.slug, "qa-2")
+
+
+class DjangoAdminIntegrationTests(TestCase):
+    def setUp(self):
+        self.superuser = User.objects.create_superuser(
+            username="admin_super", email="admin@example.com", password="superpass123"
+        )
+        self.workspace = create_workspace(owner=self.superuser, name="Admin WS")
+        self.other_workspace = create_workspace(owner=self.superuser, name="Other WS")
+        self.project = create_project(
+            workspace=self.workspace, name="Main Project", description="", created_by=self.superuser
+        )
+        self.tag = create_task_tag(
+            workspace=self.workspace, name="Design", color="#ff0000", actor=self.superuser
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Admin Main Task",
+            description="Initial desc",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.superuser,
+            tags=[self.tag],
+        )
+        self.item = add_checklist_item(
+            task=self.task, text="Initial step", actor=self.superuser, is_completed=False
+        )
+        self.client.login(username="admin_super", password="superpass123")
+
+    def test_admin_change_tag_name_and_color(self):
+        url = f"/admin/tasks/tasktag/{self.tag.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "workspace": self.workspace.id,
+                "name": "Design Updated",
+                "color": "#00ff00",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.tag.refresh_from_db()
+        self.assertEqual(self.tag.name, "Design Updated")
+        self.assertEqual(self.tag.color, "#00ff00")
+
+        # Verify ActivityLog created
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                workspace=self.workspace,
+                action="tag_updated",
+                metadata__tag_name="Design Updated",
+                metadata__tag_color="#00ff00",
+            ).exists()
+        )
+
+    def test_admin_tag_moving_to_other_workspace_forbidden(self):
+        from tasks.admin import TaskTagAdminForm
+
+        # 1. Form-level rejection
+        form = TaskTagAdminForm(
+            instance=self.tag,
+            data={"workspace": self.other_workspace.id, "name": "Design", "color": "#ff0000"},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("workspace", form.errors)
+        self.assertIn(
+            "Moving a tag to a different workspace is not allowed.", form.errors["workspace"]
+        )
+
+        # 2. HTTP post to admin cannot change workspace (it is readonly)
+        url = f"/admin/tasks/tasktag/{self.tag.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "workspace": self.other_workspace.id,
+                "name": "Design Name",
+                "color": "#ff0000",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.tag.refresh_from_db()
+        self.assertEqual(self.tag.workspace_id, self.workspace.id)
+
+    def test_admin_change_checklist_item_text_and_is_completed(self):
+        url = f"/admin/tasks/taskchecklistitem/{self.item.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "task": self.task.id,
+                "text": "Item Revised Text",
+                "is_completed": "on",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.text, "Item Revised Text")
+        self.assertTrue(self.item.is_completed)
+
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                workspace=self.workspace,
+                action="checklist_item_updated",
+                metadata__item_id=self.item.id,
+                metadata__text="Item Revised Text",
+                metadata__is_completed=True,
+            ).exists()
+        )
+
+    def test_admin_checklist_item_moving_to_other_task_forbidden(self):
+        from tasks.admin import TaskChecklistItemAdminForm
+
+        task2 = create_task(
+            project=self.project,
+            title="Second Task",
+            description="",
+            priority="low",
+            due_date=None,
+            assignee=None,
+            created_by=self.superuser,
+        )
+        # 1. Form-level rejection
+        form = TaskChecklistItemAdminForm(
+            instance=self.item,
+            data={"task": task2.id, "text": "Step", "is_completed": False},
+        )
+        self.assertFalse(form.is_valid())
+        self.assertIn("task", form.errors)
+        self.assertIn(
+            "Moving a checklist item to a different task is not allowed.", form.errors["task"]
+        )
+
+        # 2. HTTP post to admin cannot change task (it is readonly)
+        url = f"/admin/tasks/taskchecklistitem/{self.item.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "task": task2.id,
+                "text": "Item Move Attempt",
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.item.refresh_from_db()
+        self.assertEqual(self.item.task_id, self.task.id)
+
+    def test_admin_task_archive_and_restore_actions(self):
+        list_url = "/admin/tasks/task/"
+        # Archive
+        arc_res = self.client.post(
+            list_url,
+            {
+                "action": "archive_selected_tasks",
+                "_selected_action": [str(self.task.id)],
+            },
+        )
+        self.assertEqual(arc_res.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertTrue(self.task.is_archived)
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                workspace=self.workspace,
+                action="task_archived",
+                target_id=str(self.task.id),
+            ).exists()
+        )
+
+        # Restore
+        res_res = self.client.post(
+            list_url,
+            {
+                "action": "restore_selected_tasks",
+                "_selected_action": [str(self.task.id)],
+            },
+        )
+        self.assertEqual(res_res.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertFalse(self.task.is_archived)
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                workspace=self.workspace,
+                action="task_restored",
+                target_id=str(self.task.id),
+            ).exists()
+        )
+
+    def test_admin_edit_archived_task_rejected(self):
+        archive_task(task=self.task, actor=self.superuser)
+        url = f"/admin/tasks/task/{self.task.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "project": self.project.id,
+                "title": "Edited while archived",
+                "priority": "low",
+                "status": "todo",
+                "tags": [self.tag.id],
+                "checklist_items-TOTAL_FORMS": "1",
+                "checklist_items-INITIAL_FORMS": "1",
+                "checklist_items-MIN_NUM_FORMS": "0",
+                "checklist_items-MAX_NUM_FORMS": "1000",
+                "checklist_items-0-id": str(self.item.id),
+                "checklist_items-0-task": str(self.task.id),
+                "checklist_items-0-text": self.item.text,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            any(
+                "Archived tasks cannot be edited" in str(err)
+                for err in response.context["errors"]
+            )
+        )
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, "Admin Main Task")
+
+    def test_admin_task_change_tags_no_duplicate_activity_log(self):
+        initial_count = ActivityLog.objects.filter(action="task_tags_updated").count()
+        tag2 = create_task_tag(
+            workspace=self.workspace, name="UI", color="#333333", actor=self.superuser
+        )
+        url = f"/admin/tasks/task/{self.task.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "project": self.project.id,
+                "title": self.task.title,
+                "priority": self.task.priority,
+                "status": self.task.status,
+                "tags": [self.tag.id, tag2.id],
+                "checklist_items-TOTAL_FORMS": "1",
+                "checklist_items-INITIAL_FORMS": "1",
+                "checklist_items-MIN_NUM_FORMS": "0",
+                "checklist_items-MAX_NUM_FORMS": "1000",
+                "checklist_items-0-id": str(self.item.id),
+                "checklist_items-0-task": str(self.task.id),
+                "checklist_items-0-text": self.item.text,
+            },
+        )
+        self.assertEqual(response.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertEqual(set(self.task.tags.all()), {self.tag, tag2})
+        # Exactly one activity log event generated
+        self.assertEqual(
+            ActivityLog.objects.filter(action="task_tags_updated").count(),
+            initial_count + 1,
+        )
+
+    def test_admin_task_change_with_cross_workspace_tag_atomic_rollback(self):
+        foreign_tag = create_task_tag(
+            workspace=self.other_workspace,
+            name="ForeignTag",
+            color="#999999",
+            actor=self.superuser,
+        )
+        orig_title = self.task.title
+        url = f"/admin/tasks/task/{self.task.id}/change/"
+        response = self.client.post(
+            url,
+            {
+                "project": self.project.id,
+                "title": "New Title That Should Roll Back",
+                "priority": "low",
+                "status": "todo",
+                "tags": [foreign_tag.id],
+                "checklist_items-TOTAL_FORMS": "1",
+                "checklist_items-INITIAL_FORMS": "1",
+                "checklist_items-MIN_NUM_FORMS": "0",
+                "checklist_items-MAX_NUM_FORMS": "1000",
+                "checklist_items-0-id": str(self.item.id),
+                "checklist_items-0-task": str(self.task.id),
+                "checklist_items-0-text": self.item.text,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.title, orig_title)
+        self.assertEqual(list(self.task.tags.all()), [self.tag])
+
 
 

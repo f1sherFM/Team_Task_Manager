@@ -16,14 +16,9 @@ if not errorlevel 1 (
         if not errorlevel 1 (
             set "PYTHON_BOOTSTRAP=py -3.12"
         ) else (
-            py -3.11 --version >nul 2>&1
+            py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" >nul 2>&1
             if not errorlevel 1 (
-                set "PYTHON_BOOTSTRAP=py -3.11"
-            ) else (
-                py -3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
-                if not errorlevel 1 (
-                    set "PYTHON_BOOTSTRAP=py -3"
-                )
+                set "PYTHON_BOOTSTRAP=py -3"
             )
         )
     )
@@ -31,14 +26,17 @@ if not errorlevel 1 (
 
 if not defined PYTHON_BOOTSTRAP (
     if exist "%BUNDLED_PYTHON%" (
-        set "PYTHON_BOOTSTRAP="%BUNDLED_PYTHON%""
+        "%BUNDLED_PYTHON%" -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" >nul 2>&1
+        if not errorlevel 1 (
+            set "PYTHON_BOOTSTRAP="%BUNDLED_PYTHON%""
+        )
     )
 )
 
 if not defined PYTHON_BOOTSTRAP (
     where python >nul 2>&1
     if not errorlevel 1 (
-        python -c "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" >nul 2>&1
+        python -c "import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)" >nul 2>&1
         if not errorlevel 1 (
             set "PYTHON_BOOTSTRAP=python"
         )
@@ -47,7 +45,7 @@ if not defined PYTHON_BOOTSTRAP (
 
 if not defined PYTHON_BOOTSTRAP (
     echo [TTM] No working Python bootstrap runtime was found.
-    echo [TTM] Please install Python 3.11+ or make sure python/py is available in PATH.
+    echo [TTM] Please install Python 3.12+ or make sure python/py is available in PATH.
     pause
     exit /b 1
 )
