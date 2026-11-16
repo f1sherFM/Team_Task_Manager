@@ -1,0 +1,5 @@
+<div class="kanban-board-container d-flex gap-3 pb-4" style="overflow-x: auto; align-items: flex-start;">
+    {% include "tasks/partials/kanban_column.html" with column=kanban_board.todo %}
+    {% include "tasks/partials/kanban_column.html" with column=kanban_board.in_progress %}
+    {% include "tasks/partials/kanban_column.html" with column=kanban_board.done %}
+</div>

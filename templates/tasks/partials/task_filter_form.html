@@ -2,7 +2,7 @@
       method="get"
       action="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
       hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
-      hx-target="#task-list-container"
+      hx-target="#tasks-view-container"
       hx-swap="outerHTML"
       hx-trigger="input delay:300ms from:#task-search-input, change from:select, taskStatusChanged from:body"
       hx-sync="closest form:replace"
@@ -84,7 +84,7 @@
                 <a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
                    class="btn btn-sm btn-outline-secondary btn-clear-filters"
                    hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}?clear=1"
-                   hx-target="#task-list-container"
+                   hx-target="#tasks-view-container"
                    hx-swap="outerHTML"
                    hx-push-url="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">
                     Clear

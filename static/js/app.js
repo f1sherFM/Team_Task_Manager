@@ -51,6 +51,18 @@
         }, 5000);
     }
 
+    // Expose showToast globally via window.ttm namespace
+    window.ttm = window.ttm || {};
+    window.ttm.showToast = showToast;
+
+    // Listen for custom HTMX trigger showMessage
+    document.addEventListener('showMessage', function (evt) {
+        var msg = evt.detail && evt.detail.value ? evt.detail.value : evt.detail;
+        if (typeof msg === 'string') {
+            showToast(msg, 'success');
+        }
+    });
+
     // Handle HTMX response errors (400, 403, 404, 500)
     document.addEventListener('htmx:responseError', function (evt) {
         var xhr = evt.detail.xhr;

@@ -1,8 +1,10 @@
+import json
+
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import PermissionDenied
 from django.core.paginator import Paginator
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.views.generic import FormView, TemplateView, View
 
@@ -19,9 +21,11 @@ from core.permissions import (
 from projects.models import Project
 from projects.selectors import get_workspace_project_by_slug
 from tasks.forms import TaskCreateForm, TaskUpdateForm
-from tasks.models import Task, TaskStatus
+from tasks.models import Task, TaskPriority, TaskStatus
 from tasks.selectors import (
     filter_tasks,
+    get_kanban_board_tasks,
+    get_kanban_column_page,
     get_project_task_by_slug,
     get_project_task_candidates,
     get_project_tasks,
@@ -124,6 +128,25 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
         paginator = Paginator(tasks_qs, 20)
         page_obj = paginator.get_page(self.request.GET.get("page"))
 
+        try:
+            kanban_board = get_kanban_board_tasks(
+                project=self.project,
+                per_column_limit=20,
+                status_value=status_val,
+                priority=priority,
+                assignee_id=assignee_id,
+                tag_slug=tag_slug,
+                is_overdue=is_overdue,
+                is_archived=is_archived,
+                search=search,
+            )
+        except ValueError:
+            kanban_board = get_kanban_board_tasks(
+                project=self.project,
+                per_column_limit=20,
+                is_archived=is_archived,
+            )
+
         membership = get_workspace_membership(
             workspace=self.project.workspace,
             user=self.request.user,
@@ -132,6 +155,7 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
 
         context["project"] = self.project
         context["tasks"] = page_obj
+        context["kanban_board"] = kanban_board
         context["page_obj"] = page_obj
         context["is_paginated"] = page_obj.has_other_pages()
         context["can_create_task"] = can_create_task(project=self.project, user=self.request.user)
@@ -149,15 +173,20 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
             "is_overdue": is_overdue or "",
             "is_archived": archived_param or "0",
         }
-        context["htmx_target"] = "#task-list-container"
+        context["htmx_target"] = "#tasks-view-container"
         context["is_cleared"] = is_cleared
         return context
 
     def render_to_response(self, context, **response_kwargs):
         if self.request.headers.get("HX-Request") == "true":
+            target = self.request.headers.get("HX-Target")
+            if target == "task-list-container":
+                template = "tasks/partials/task_list_container.html"
+            else:
+                template = "tasks/partials/tasks_view_container.html"
             return self.response_class(
                 request=self.request,
-                template="tasks/partials/task_list_container.html",
+                template=template,
                 context=context,
                 using=self.template_engine,
                 **response_kwargs,
@@ -228,10 +257,11 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
 
     def post(self, request, *args, **kwargs):
         is_htmx = request.headers.get("HX-Request") == "true"
+        is_kanban_drag = request.headers.get("X-TTM-Kanban-Drag") == "true"
         new_status = request.POST.get("status")
 
         if not new_status or new_status not in TaskStatus.values:
-            if is_htmx:
+            if is_htmx or is_kanban_drag:
                 return HttpResponse("Invalid task status.", status=400)
             messages.error(request, "Invalid task status.")
             return redirect(
@@ -242,7 +272,7 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
             )
 
         if not can_change_task_status(task=self.task, user=request.user):
-            if is_htmx:
+            if is_htmx or is_kanban_drag:
                 return HttpResponse(
                     "Permission denied. Status change requires admin access or assignee role.",
                     status=403,
@@ -254,7 +284,7 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
         try:
             self.task = change_task_status(task=self.task, status=new_status, actor=request.user)
         except DomainError as exc:
-            if is_htmx:
+            if is_htmx or is_kanban_drag:
                 return HttpResponse(str(exc), status=400)
             messages.error(request, str(exc))
             return redirect(
@@ -262,6 +292,17 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
                 workspace_slug=self.task.project.workspace.slug,
                 project_slug=self.task.project.slug,
                 task_slug=self.task.slug,
+            )
+
+        if is_kanban_drag:
+            return JsonResponse(
+                {
+                    "success": True,
+                    "task_id": self.task.id,
+                    "task_slug": self.task.slug,
+                    "status": self.task.status,
+                    "status_display": self.task.get_status_display(),
+                }
             )
 
         if is_htmx:
@@ -289,6 +330,180 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
             project_slug=self.task.project.slug,
             task_slug=self.task.slug,
         )
+
+
+class KanbanTaskQuickCreateView(ProjectTaskAccessMixin, View):
+    def post(self, request, *args, **kwargs):
+        is_htmx = request.headers.get("HX-Request") == "true"
+        title = request.POST.get("title", "").strip()
+        status = request.POST.get("status", TaskStatus.TODO).strip()
+        priority = request.POST.get("priority", TaskPriority.MEDIUM).strip()
+
+        if not title:
+            if is_htmx:
+                return HttpResponse("Task title is required.", status=400)
+            messages.error(request, "Task title is required.")
+            return redirect(
+                "project-task-list",
+                workspace_slug=self.project.workspace.slug,
+                project_slug=self.project.slug,
+            )
+
+        if status not in TaskStatus.values:
+            if is_htmx:
+                return HttpResponse(f"Invalid task status '{status}'.", status=400)
+            messages.error(request, f"Invalid task status '{status}'.")
+            return redirect(
+                "project-task-list",
+                workspace_slug=self.project.workspace.slug,
+                project_slug=self.project.slug,
+            )
+
+        if priority not in TaskPriority.values:
+            priority = TaskPriority.MEDIUM
+
+        if not can_create_task(project=self.project, user=request.user):
+            if is_htmx:
+                return HttpResponse(
+                    "Permission denied. Task creation requires workspace membership.",
+                    status=403,
+                )
+            raise PermissionDenied("Task creation requires workspace membership.")
+
+        try:
+            task = create_task(
+                project=self.project,
+                title=title,
+                description="",
+                priority=priority,
+                due_date=None,
+                assignee=None,
+                status=status,
+                created_by=request.user,
+            )
+        except DomainError as exc:
+            if is_htmx:
+                status_code = 403 if "Status change requires" in str(exc) else 400
+                return HttpResponse(str(exc), status=status_code)
+            messages.error(request, str(exc))
+            return redirect(
+                "project-task-list",
+                workspace_slug=self.project.workspace.slug,
+                project_slug=self.project.slug,
+            )
+
+        if is_htmx:
+            membership = get_workspace_membership(
+                workspace=self.project.workspace,
+                user=request.user,
+            )
+            is_workspace_admin = has_membership_role(membership, "owner", "admin")
+            column_count = get_project_tasks(project=self.project).filter(status=status).count()
+            response = render(
+                request,
+                "tasks/partials/kanban_card.html",
+                {
+                    "task": task,
+                    "project": self.project,
+                    "can_change_task_status": (
+                        is_workspace_admin or task.assignee_id == request.user.id
+                    ),
+                    "is_workspace_admin": is_workspace_admin,
+                    "new_column_count": column_count,
+                    "column_status": status,
+                    "is_new_card": True,
+                },
+            )
+            response["HX-Trigger"] = json.dumps({"showMessage": "Task created."})
+            return response
+
+        messages.success(request, "Task created.")
+        return redirect(
+            "project-task-list",
+            workspace_slug=self.project.workspace.slug,
+            project_slug=self.project.slug,
+        )
+
+
+class KanbanColumnLoadMoreView(ProjectTaskAccessMixin, View):
+    def get(self, request, *args, **kwargs):
+        status = request.GET.get("status", "").strip()
+        if status not in TaskStatus.values:
+            return HttpResponse("Invalid status.", status=400)
+
+        try:
+            offset = max(0, int(request.GET.get("offset", 0)))
+        except (ValueError, TypeError):
+            offset = 0
+
+        try:
+            limit = min(50, max(1, int(request.GET.get("limit", 20))))
+        except (ValueError, TypeError):
+            limit = 20
+
+        search = request.GET.get("search", "").strip() or None
+        priority = request.GET.get("priority", "").strip() or None
+        assignee_id = request.GET.get("assignee", "").strip() or None
+        tag_slug = request.GET.get("tag", "").strip() or None
+        is_overdue = request.GET.get("is_overdue", "").strip() or None
+        archived_param = request.GET.get("is_archived", "").strip()
+
+        if archived_param in ("1", "true"):
+            is_archived = True
+        elif archived_param == "all":
+            is_archived = None
+        else:
+            is_archived = False
+            archived_param = "0"
+
+        try:
+            page_data = get_kanban_column_page(
+                project=self.project,
+                status=status,
+                offset=offset,
+                limit=limit,
+                priority=priority,
+                assignee_id=assignee_id,
+                tag_slug=tag_slug,
+                is_overdue=is_overdue,
+                is_archived=is_archived,
+                search=search,
+            )
+        except ValueError:
+            page_data = get_kanban_column_page(
+                project=self.project,
+                status=status,
+                offset=offset,
+                limit=limit,
+                is_archived=is_archived,
+            )
+
+        membership = get_workspace_membership(
+            workspace=self.project.workspace,
+            user=request.user,
+        )
+        is_workspace_admin = has_membership_role(membership, "owner", "admin")
+
+        context = {
+            "project": self.project,
+            "status": status,
+            "tasks": page_data["tasks"],
+            "has_more": page_data["has_more"],
+            "next_offset": page_data["next_offset"],
+            "remaining_count": page_data["remaining_count"],
+            "is_workspace_admin": is_workspace_admin,
+            "can_change_task_status": is_workspace_admin,
+            "current_filters": {
+                "search": search or "",
+                "status": status,
+                "priority": priority or "",
+                "assignee": assignee_id or "",
+                "tag": tag_slug or "",
+                "is_overdue": is_overdue or "",
+                "is_archived": archived_param or "0",
+            },
+        }
+        return render(request, "tasks/partials/kanban_column_slice.html", context)
 
 
 class TaskUpdateView(TaskAccessMixin, FormView):

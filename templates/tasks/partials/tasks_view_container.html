@@ -1,0 +1,54 @@
+<div id="tasks-view-container" data-user-id="{{ request.user.id }}">
+    {% if is_cleared %}
+        <div id="task-filter-wrapper" hx-swap-oob="innerHTML">
+            {% include "tasks/partials/task_filter_form.html" %}
+        </div>
+    {% endif %}
+
+    <!-- View Mode Switcher -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div class="btn-group shadow-sm" role="group" aria-label="Task view mode" id="task-view-switcher">
+            <button type="button" class="btn btn-sm btn-outline-primary active" id="view-mode-board-btn" data-view="board">
+                <svg class="bi me-1" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M14 1a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1zM2 0a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V2a2 2 0 0 0-2-2z"/>
+                    <path d="M4 3h2v10H4zm4 0h2v10H8zm4 0h2v10h-2z"/>
+                </svg>
+                Board
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="view-mode-list-btn" data-view="list">
+                <svg class="bi me-1" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path fill-rule="evenodd" d="M2.5 12a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5m0-4a.5.5 0 0 1 .5-.5h10a.5.5 0 0 1 0 1H3a.5.5 0 0 1-.5-.5"/>
+                </svg>
+                List
+            </button>
+        </div>
+    </div>
+
+    <!-- Kanban Board View (Default for new users) -->
+    <div id="kanban-board-view" class="kanban-board-view">
+        {% include "tasks/partials/kanban_board.html" %}
+    </div>
+
+    <!-- List View -->
+    <div id="task-list-view" class="task-list-view d-none">
+        <div class="row g-4">
+            <div class="{% if can_create_task %}col-xl-8{% else %}col-12{% endif %}">
+                {% include "tasks/partials/task_list_container.html" %}
+            </div>
+            {% if can_create_task %}
+                <div class="col-xl-4">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-4">
+                            <h2 class="h4 mb-3">Create task</h2>
+                            <form method="post" class="ttm-form">
+                                {% csrf_token %}
+                                {{ form.as_p }}
+                                <button type="submit" class="btn btn-primary w-100">Create task</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>

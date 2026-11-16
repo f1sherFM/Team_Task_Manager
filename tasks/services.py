@@ -32,12 +32,21 @@ def create_task(
     assignee,
     created_by,
     tags: list[TaskTag] | None = None,
+    status: str = TaskStatus.TODO,
 ) -> Task:
     if project.is_archived:
         raise DomainError("Tasks cannot be changed in archived projects.")
 
     if not can_create_task(project=project, user=created_by):
         raise DomainError("Task creation requires workspace membership.")
+
+    if status not in TaskStatus.values:
+        raise DomainError(f"Invalid task status '{status}'.")
+
+    if status != TaskStatus.TODO:
+        task_stub = _build_task_stub(project=project, assignee=assignee)
+        if not can_change_task_status(task=task_stub, user=created_by):
+            raise DomainError("Status change requires admin access or assignee role.")
 
     if assignee and not can_assign_task(task=_build_task_stub(project=project), user=created_by):
         raise DomainError("Only workspace admins can assign tasks.")
@@ -62,6 +71,7 @@ def create_task(
             "created_by": created_by,
             "assignee": assignee,
             "due_date": due_date,
+            "status": status,
         },
     )
     if tags:
@@ -75,6 +85,16 @@ def create_task(
         target_id=str(task.id),
         metadata={"project_id": project.id, "task_title": task.title},
     )
+
+    if status != TaskStatus.TODO:
+        log_activity(
+            workspace=project.workspace,
+            actor=created_by,
+            action="task_status_changed",
+            target_type="task",
+            target_id=str(task.id),
+            metadata={"previous_status": TaskStatus.TODO, "status": status},
+        )
     return task
 
 
@@ -706,5 +726,5 @@ def reorder_checklist_items(
     return list(locked_task.checklist_items.order_by("position", "id"))
 
 
-def _build_task_stub(*, project: Project) -> Task:
-    return Task(project=project)
+def _build_task_stub(*, project: Project, assignee=None) -> Task:
+    return Task(project=project, assignee=assignee)

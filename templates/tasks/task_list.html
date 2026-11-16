@@ -20,33 +20,12 @@
         {% include "tasks/partials/task_filter_form.html" %}
     </div>
 
-    <div class="row g-4">
-        {% if is_project_archived %}
-            <div class="col-12">
-                <div class="alert alert-warning border shadow-sm mb-0">
-                    This project is archived. Tasks remain visible, but task creation and edits are disabled.
-                </div>
-            </div>
-        {% endif %}
-
-        <div class="{% if can_create_task %}col-xl-8{% else %}col-12{% endif %}">
-            {% include "tasks/partials/task_list_container.html" %}
+    {% if is_project_archived %}
+        <div class="alert alert-warning border shadow-sm mb-4">
+            This project is archived. Tasks remain visible, but task creation and edits are disabled.
         </div>
+    {% endif %}
 
-        {% if can_create_task %}
-            <div class="col-xl-4">
-                <div class="card border-0 shadow-sm">
-                    <div class="card-body p-4">
-                        <h2 class="h4 mb-3">Create task</h2>
-                        <form method="post" class="ttm-form">
-                            {% csrf_token %}
-                            {{ form.as_p }}
-                            <button type="submit" class="btn btn-primary w-100">Create task</button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        {% endif %}
-    </div>
+    {% include "tasks/partials/tasks_view_container.html" %}
 </section>
 {% endblock %}

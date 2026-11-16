@@ -1,6 +1,8 @@
 from django.urls import path
 
 from tasks.views import (
+    KanbanColumnLoadMoreView,
+    KanbanTaskQuickCreateView,
     ProjectTaskListView,
     TaskDetailView,
     TaskStatusUpdateView,
@@ -12,6 +14,16 @@ urlpatterns = [
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/",
         ProjectTaskListView.as_view(),
         name="project-task-list",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/quick-create/",
+        KanbanTaskQuickCreateView.as_view(),
+        name="kanban-task-quick-create",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/kanban/column/",
+        KanbanColumnLoadMoreView.as_view(),
+        name="kanban-column-load-more",
     ),
     path(
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/",

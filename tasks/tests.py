@@ -9,8 +9,10 @@ from comments.services import add_comment
 from core.exceptions import DomainError
 from core.integrity import check_checklist_item_integrity, check_task_tag_workspace_integrity
 from projects.services import archive_project, create_project
-from tasks.models import Task, TaskChecklistItem, TaskStatus, TaskTag
+from tasks.models import Task, TaskChecklistItem, TaskPriority, TaskStatus, TaskTag
 from tasks.selectors import (
+    get_kanban_board_tasks,
+    get_kanban_column_page,
     get_task_checklist_items,
     get_workspace_tag_by_id,
     get_workspace_tag_by_slug,
@@ -1535,6 +1537,277 @@ class HtmxSessionExpiryMiddlewareTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertNotIn("HX-Redirect", response.headers)
         self.assertNotIn("Location", response.headers)
+
+
+class KanbanBoardTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="kb_owner", password="password")
+        self.member = User.objects.create_user(username="kb_member", password="password")
+        self.outsider = User.objects.create_user(username="kb_outsider", password="password")
+        self.workspace = create_workspace(name="KB Workspace", owner=self.owner)
+        Membership.objects.create(
+            workspace=self.workspace,
+            user=self.member,
+            role=MembershipRole.MEMBER,
+        )
+        self.project = create_project(
+            workspace=self.workspace,
+            name="KB Project",
+            description="",
+            created_by=self.owner,
+        )
+        self.task_todo = create_task(
+            project=self.project,
+            title="Todo Task",
+            description="",
+            priority=TaskPriority.MEDIUM,
+            due_date=None,
+            assignee=None,
+            created_by=self.owner,
+        )
+        self.quick_create_url = reverse(
+            "kanban-task-quick-create",
+            kwargs={"workspace_slug": self.workspace.slug, "project_slug": self.project.slug},
+        )
+        self.load_more_url = reverse(
+            "kanban-column-load-more",
+            kwargs={"workspace_slug": self.workspace.slug, "project_slug": self.project.slug},
+        )
+        self.list_url = reverse(
+            "project-task-list",
+            kwargs={"workspace_slug": self.workspace.slug, "project_slug": self.project.slug},
+        )
+
+    def test_create_task_with_non_todo_status_by_admin(self):
+        task = create_task(
+            project=self.project,
+            title="In Progress Task",
+            description="",
+            priority=TaskPriority.MEDIUM,
+            due_date=None,
+            assignee=None,
+            status=TaskStatus.IN_PROGRESS,
+            created_by=self.owner,
+        )
+        self.assertEqual(task.status, TaskStatus.IN_PROGRESS)
+        logs = ActivityLog.objects.filter(target_id=str(task.id)).order_by("created_at")
+        actions = [log.action for log in logs]
+        self.assertIn("task_created", actions)
+        self.assertIn("task_status_changed", actions)
+
+    def test_create_task_with_non_todo_status_by_member_denied(self):
+        with self.assertRaises(DomainError) as exc:
+            create_task(
+                project=self.project,
+                title="Member In Progress",
+                description="",
+                priority=TaskPriority.MEDIUM,
+                due_date=None,
+                assignee=None,
+                status=TaskStatus.IN_PROGRESS,
+                created_by=self.member,
+            )
+        self.assertIn("Status change requires admin access or assignee role", str(exc.exception))
+
+    def test_create_task_with_invalid_status_raises_domain_error(self):
+        with self.assertRaises(DomainError) as exc:
+            create_task(
+                project=self.project,
+                title="Bad Status Task",
+                description="",
+                priority=TaskPriority.MEDIUM,
+                due_date=None,
+                assignee=None,
+                status="invalid_status",
+                created_by=self.owner,
+            )
+        self.assertIn("Invalid task status 'invalid_status'", str(exc.exception))
+
+    def test_get_kanban_board_tasks_and_pagination(self):
+        for i in range(25):
+            create_task(
+                project=self.project,
+                title=f"Batch Task {i}",
+                description="",
+                priority=TaskPriority.MEDIUM,
+                due_date=None,
+                assignee=None,
+                created_by=self.owner,
+            )
+
+        board = get_kanban_board_tasks(project=self.project, per_column_limit=20)
+        todo_col = board["todo"]
+        self.assertEqual(todo_col["total_count"], 26)
+        self.assertEqual(len(todo_col["tasks"]), 20)
+        self.assertTrue(todo_col["has_more"])
+        self.assertEqual(todo_col["next_offset"], 20)
+        self.assertEqual(todo_col["remaining_count"], 6)
+
+        page = get_kanban_column_page(
+            project=self.project,
+            status="todo",
+            offset=20,
+            limit=20,
+        )
+        self.assertEqual(len(page["tasks"]), 6)
+        self.assertFalse(page["has_more"])
+        self.assertIsNone(page["next_offset"])
+        self.assertEqual(page["remaining_count"], 0)
+
+    def test_kanban_quick_create_htmx_success(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {"title": "Quick Task", "priority": "high", "status": "todo"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("Quick Task", content)
+        self.assertIn('id="column-count-todo"', content)
+        self.assertIn('hx-swap-oob="true"', content)
+        self.assertIn("showMessage", response.headers.get("HX-Trigger", ""))
+
+    def test_kanban_quick_create_permission_denied_for_status(self):
+        self.client.force_login(self.member)
+        response = self.client.post(
+            self.quick_create_url,
+            {"title": "Member InProgress", "status": "in_progress"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_kanban_quick_create_validation_error(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {"title": ""},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Task title is required", response.content.decode("utf-8"))
+
+    def test_kanban_quick_create_archived_project_blocked(self):
+        archive_project(project=self.project, actor=self.owner)
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {"title": "Archived Quick Task", "status": "todo"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_kanban_column_load_more_view_success(self):
+        self.client.force_login(self.member)
+        response = self.client.get(
+            self.load_more_url,
+            {"status": "todo", "offset": "0", "limit": "10"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("kanban-card", response.content.decode("utf-8"))
+
+    def test_kanban_column_load_more_view_invalid_status(self):
+        self.client.force_login(self.member)
+        response = self.client.get(self.load_more_url, {"status": "bad_status"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_kanban_drag_status_update_success(self):
+        status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task_todo.slug,
+            },
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            status_url,
+            {"status": "in_progress"},
+            headers={"X-TTM-Kanban-Drag": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertTrue(data["success"])
+        self.assertEqual(data["status"], "in_progress")
+        self.task_todo.refresh_from_db()
+        self.assertEqual(self.task_todo.status, TaskStatus.IN_PROGRESS)
+
+    def test_kanban_drag_status_update_permission_denied(self):
+        status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task_todo.slug,
+            },
+        )
+        self.client.force_login(self.member)
+        response = self.client.post(
+            status_url,
+            {"status": "done"},
+            headers={"X-TTM-Kanban-Drag": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_kanban_drag_status_update_archived_task_denied(self):
+        archive_task(task=self.task_todo, actor=self.owner)
+        status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task_todo.slug,
+            },
+        )
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            status_url,
+            {"status": "in_progress"},
+            headers={"X-TTM-Kanban-Drag": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_project_task_list_contains_both_views_and_switcher(self):
+        self.client.force_login(self.member)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("task-view-switcher", content)
+        self.assertIn("kanban-board-view", content)
+        self.assertIn("task-list-view", content)
+        self.assertIn("column-count-todo", content)
+        self.assertIn("column-count-in_progress", content)
+        self.assertIn("column-count-done", content)
+
+    def test_project_task_list_htmx_filter_returns_view_container(self):
+        self.client.force_login(self.member)
+        response = self.client.get(
+            self.list_url,
+            {"search": "Todo"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn('id="tasks-view-container"', content)
+        self.assertIn("Todo Task", content)
+
+    def test_checklist_and_overdue_template_filters(self):
+        from core.templatetags.core_tags import checklist_progress, is_task_overdue
+
+        add_checklist_item(task=self.task_todo, text="Item 1", actor=self.owner)
+        item2 = add_checklist_item(task=self.task_todo, text="Item 2", actor=self.owner)
+        toggle_checklist_item(item=item2, actor=self.owner)
+        self.task_todo.refresh_from_db()
+        self.assertEqual(checklist_progress(self.task_todo), "1/2")
+        self.assertFalse(is_task_overdue(self.task_todo))
+
+        self.task_todo.due_date = timezone.localdate() - timezone.timedelta(days=1)
+        self.assertTrue(is_task_overdue(self.task_todo))
+
+        self.task_todo.status = TaskStatus.DONE
+        self.assertFalse(is_task_overdue(self.task_todo))
+
 
 
 

@@ -1,0 +1,83 @@
+{% load core_tags %}
+{% if is_new_card %}
+    <span id="column-count-{{ column_status }}" class="badge rounded-pill bg-light text-dark border" hx-swap-oob="true">{{ new_column_count }}</span>
+    <div id="kanban-empty-{{ column_status }}" class="d-none" hx-swap-oob="true"></div>
+{% endif %}
+
+<div class="kanban-card card border-0 shadow-sm mb-2 {% if task.is_archived or task.project.is_archived or not can_change_task_status and not is_workspace_admin and task.assignee_id != request.user.id %}kanban-card-disabled{% else %}kanban-card-draggable{% endif %}"
+     id="kanban-card-{{ task.id }}"
+     data-task-id="{{ task.id }}"
+     data-task-slug="{{ task.slug }}"
+     data-status="{{ task.status }}"
+     data-status-url="{% url 'task-status-update' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">
+    <div class="card-body p-3">
+        <div class="d-flex justify-content-between align-items-start gap-2 mb-2">
+            <h3 class="h6 mb-0 flex-grow-1">
+                <a class="text-decoration-none text-dark fw-semibold" href="{% url 'task-detail' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">
+                    {{ task.title }}
+                </a>
+            </h3>
+            <div class="d-flex align-items-center gap-1">
+                {% if task.priority == "high" %}
+                    <span class="badge text-bg-danger" style="font-size: 0.7rem;">High</span>
+                {% elif task.priority == "medium" %}
+                    <span class="badge text-bg-warning" style="font-size: 0.7rem;">Medium</span>
+                {% else %}
+                    <span class="badge text-bg-light border text-dark" style="font-size: 0.7rem;">Low</span>
+                {% endif %}
+                {% if not task.is_archived and not task.project.is_archived and can_change_task_status or is_workspace_admin or task.assignee_id == request.user.id %}
+                    <span class="kanban-drag-handle text-secondary" title="Drag to reorder/move" style="cursor: grab;">
+                        <svg class="bi" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M7 2a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m0 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m0 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m5-11a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m0 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0m0 5.5a1.5 1.5 0 1 1-3 0 1.5 1.5 0 0 1 3 0"/>
+                        </svg>
+                    </span>
+                {% endif %}
+            </div>
+        </div>
+
+        {% if task.tags.all %}
+            <div class="d-flex flex-wrap gap-1 mb-2">
+                {% for tag in task.tags.all %}
+                    <span class="badge rounded-pill" style="background-color: {{ tag.color }}; color: #fff; font-size: 0.68rem;">
+                        {{ tag.name }}
+                    </span>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if task.description %}
+            <p class="text-body-secondary small mb-2 text-truncate" style="max-height: 2.4em; font-size: 0.8rem;">
+                {{ task.description|truncatechars:90 }}
+            </p>
+        {% endif %}
+
+        <div class="d-flex flex-wrap align-items-center gap-2 pt-2 border-top">
+            <span class="badge text-bg-light border text-secondary" style="font-size: 0.72rem;">
+                {{ task.assignee.username|default:"Unassigned" }}
+            </span>
+            {% with progress=task|checklist_progress %}
+                {% if progress %}
+                    <span class="badge text-bg-light border text-muted" style="font-size: 0.72rem;" title="Checklist progress">
+                        &#9745; {{ progress }}
+                    </span>
+                {% endif %}
+            {% endwith %}
+            {% if task.due_date %}
+                <span class="small ms-auto {% if task|is_task_overdue %}text-danger fw-bold{% else %}text-body-secondary{% endif %}" style="font-size: 0.75rem;" title="Due date{% if task|is_task_overdue %} (Overdue!){% endif %}">
+                    {{ task.due_date|date:"M j" }}
+                </span>
+            {% endif %}
+        </div>
+
+        <div class="mt-2 pt-1 d-flex justify-content-between align-items-center">
+            <div class="kanban-card-status-dropdown">
+                {% include "tasks/partials/task_status_dropdown.html" with task=task can_change_status=can_change_task_status is_workspace_admin=is_workspace_admin %}
+            </div>
+            <a href="{% url 'task-detail' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}"
+               class="btn btn-sm btn-link p-0 text-decoration-none text-body-secondary"
+               style="font-size: 0.75rem;">
+                Details &rarr;
+            </a>
+        </div>
+    </div>
+</div>

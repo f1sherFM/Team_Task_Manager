@@ -22,7 +22,7 @@
                         <a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
                            class="btn btn-sm btn-outline-secondary btn-clear-filters"
                            hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}?clear=1"
-                           hx-target="#task-list-container"
+                           hx-target="#tasks-view-container"
                            hx-swap="outerHTML"
                            hx-push-url="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">
                             Clear all filters
@@ -32,5 +32,5 @@
             </div>
         {% endfor %}
     </div>
-    {% include "includes/pagination.html" with htmx_target="#task-list-container" %}
+    {% include "includes/pagination.html" with htmx_target="#tasks-view-container" %}
 </div>

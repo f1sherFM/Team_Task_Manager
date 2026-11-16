@@ -1,0 +1,18 @@
+{% for task in tasks %}
+    {% include "tasks/partials/kanban_card.html" with task=task can_change_task_status=can_change_task_status is_workspace_admin=is_workspace_admin %}
+{% endfor %}
+
+<div id="kanban-load-more-container-{{ status }}" hx-swap-oob="innerHTML">
+    {% if has_more %}
+        <button class="btn btn-sm btn-outline-secondary w-100 btn-kanban-load-more"
+                id="kanban-load-more-btn-{{ status }}"
+                type="button"
+                hx-get="{% url 'kanban-column-load-more' workspace_slug=project.workspace.slug project_slug=project.slug %}?status={{ status }}&offset={{ next_offset }}{% if current_filters.search %}&search={{ current_filters.search|urlencode }}{% endif %}{% if current_filters.priority %}&priority={{ current_filters.priority }}{% endif %}{% if current_filters.assignee %}&assignee={{ current_filters.assignee }}{% endif %}{% if current_filters.tag %}&tag={{ current_filters.tag }}{% endif %}{% if current_filters.is_overdue %}&is_overdue={{ current_filters.is_overdue }}{% endif %}{% if current_filters.is_archived %}&is_archived={{ current_filters.is_archived }}{% endif %}"
+                hx-target="#kanban-cards-{{ status }}"
+                hx-swap="beforeend"
+                hx-indicator="#kanban-spinner-{{ status }}">
+            <span id="kanban-spinner-{{ status }}" class="spinner-border spinner-border-sm htmx-indicator me-1" role="status"></span>
+            Load more ({{ remaining_count }} remaining)
+        </button>
+    {% endif %}
+</div>

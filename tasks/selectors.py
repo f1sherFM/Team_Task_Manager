@@ -154,3 +154,109 @@ def filter_tasks(
                 | Q(slug__icontains=search_term)
             )
     return queryset
+
+
+def get_kanban_board_tasks(
+    *,
+    project: Project,
+    per_column_limit: int = 20,
+    status_value: str | None = None,
+    priority: str | None = None,
+    assignee_id: str | None = None,
+    tag_slug: str | None = None,
+    is_overdue: str | None = None,
+    is_archived: bool | None = False,
+    search: str | None = None,
+) -> dict:
+    base_qs = get_project_tasks(project=project)
+    filtered_qs = filter_tasks(
+        base_qs,
+        priority=priority,
+        assignee_id=assignee_id,
+        tag_slug=tag_slug,
+        is_overdue=is_overdue,
+        is_archived=is_archived,
+        search=search,
+    )
+
+    column_definitions = [
+        ("todo", "To Do", "border-secondary"),
+        ("in_progress", "In Progress", "border-primary"),
+        ("done", "Done", "border-success"),
+    ]
+
+    board = {}
+    for col_status, col_name, col_border in column_definitions:
+        if status_value and status_value != col_status:
+            board[col_status] = {
+                "status": col_status,
+                "name": col_name,
+                "border_class": col_border,
+                "total_count": 0,
+                "tasks": [],
+                "has_more": False,
+                "next_offset": None,
+                "remaining_count": 0,
+            }
+            continue
+
+        col_qs = filtered_qs.filter(status=col_status).order_by("-created_at", "-id")
+        total_count = col_qs.count()
+        tasks = list(col_qs[:per_column_limit])
+        has_more = total_count > per_column_limit
+        next_offset = per_column_limit if has_more else None
+        remaining_count = max(0, total_count - per_column_limit)
+
+        board[col_status] = {
+            "status": col_status,
+            "name": col_name,
+            "border_class": col_border,
+            "total_count": total_count,
+            "tasks": tasks,
+            "has_more": has_more,
+            "next_offset": next_offset,
+            "remaining_count": remaining_count,
+        }
+
+    return board
+
+
+def get_kanban_column_page(
+    *,
+    project: Project,
+    status: str,
+    offset: int = 0,
+    limit: int = 20,
+    priority: str | None = None,
+    assignee_id: str | None = None,
+    tag_slug: str | None = None,
+    is_overdue: str | None = None,
+    is_archived: bool | None = False,
+    search: str | None = None,
+) -> dict:
+    base_qs = get_project_tasks(project=project)
+    filtered_qs = filter_tasks(
+        base_qs,
+        priority=priority,
+        assignee_id=assignee_id,
+        tag_slug=tag_slug,
+        is_overdue=is_overdue,
+        is_archived=is_archived,
+        search=search,
+    )
+    col_qs = filtered_qs.filter(status=status).order_by("-created_at", "-id")
+    total_count = col_qs.count()
+    tasks = list(col_qs[offset : offset + limit])
+    loaded_so_far = offset + len(tasks)
+    has_more = total_count > loaded_so_far
+    next_offset = loaded_so_far if has_more else None
+    remaining_count = max(0, total_count - loaded_so_far)
+
+    return {
+        "status": status,
+        "tasks": tasks,
+        "total_count": total_count,
+        "has_more": has_more,
+        "next_offset": next_offset,
+        "remaining_count": remaining_count,
+    }
