@@ -79,32 +79,47 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        search = self.request.GET.get("search", "").strip() or None
-        status_val = self.request.GET.get("status", "").strip() or None
-        priority = self.request.GET.get("priority", "").strip() or None
-        assignee_id = self.request.GET.get("assignee", "").strip() or None
-        tag_slug = self.request.GET.get("tag", "").strip() or None
-        is_overdue = self.request.GET.get("is_overdue", "").strip() or None
-        archived_param = self.request.GET.get("is_archived", "").strip()
-
-        if archived_param == "1":
-            is_archived = True
-        elif archived_param == "all":
-            is_archived = None
-        else:
+        is_cleared = self.request.GET.get("clear") == "1"
+        if is_cleared:
+            search = None
+            status_val = None
+            priority = None
+            assignee_id = None
+            tag_slug = None
+            is_overdue = None
             is_archived = False
+            archived_param = "0"
+        else:
+            search = self.request.GET.get("search", "").strip() or None
+            status_val = self.request.GET.get("status", "").strip() or None
+            priority = self.request.GET.get("priority", "").strip() or None
+            assignee_id = self.request.GET.get("assignee", "").strip() or None
+            tag_slug = self.request.GET.get("tag", "").strip() or None
+            is_overdue = self.request.GET.get("is_overdue", "").strip() or None
+            archived_param = self.request.GET.get("is_archived", "").strip()
+
+            if archived_param in ("1", "true"):
+                is_archived = True
+            elif archived_param == "all":
+                is_archived = None
+            else:
+                is_archived = False
+                archived_param = "0"
 
         tasks_qs = get_project_tasks(project=self.project)
-        tasks_qs = filter_tasks(
-            tasks_qs,
-            status_value=status_val,
-            priority=priority,
-            assignee_id=assignee_id,
-            tag_slug=tag_slug,
-            is_overdue=is_overdue,
-            is_archived=is_archived,
-            search=search,
-        )
+        try:
+            tasks_qs = filter_tasks(
+                tasks_qs,
+                status_value=status_val,
+                priority=priority,
+                assignee_id=assignee_id,
+                tag_slug=tag_slug,
+                is_overdue=is_overdue,
+                is_archived=is_archived,
+                search=search,
+            )
+        except ValueError:
+            tasks_qs = filter_tasks(tasks_qs, is_archived=is_archived)
 
         paginator = Paginator(tasks_qs, 20)
         page_obj = paginator.get_page(self.request.GET.get("page"))
@@ -135,6 +150,7 @@ class ProjectTaskListView(ProjectTaskAccessMixin, FormView):
             "is_archived": archived_param or "0",
         }
         context["htmx_target"] = "#task-list-container"
+        context["is_cleared"] = is_cleared
         return context
 
     def render_to_response(self, context, **response_kwargs):
@@ -254,7 +270,7 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
                 user=request.user,
             )
             is_workspace_admin = has_membership_role(membership, "owner", "admin")
-            return render(
+            response = render(
                 request,
                 "tasks/partials/task_status_dropdown.html",
                 {
@@ -263,6 +279,8 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
                     "is_workspace_admin": is_workspace_admin,
                 },
             )
+            response["HX-Trigger"] = "taskStatusChanged"
+            return response
 
         messages.success(request, f"Task status updated to {self.task.get_status_display()}.")
         return redirect(

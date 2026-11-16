@@ -1206,6 +1206,7 @@ class TaskStatusUpdateViewTests(TestCase):
         self.assertEqual(self.task.status, "in_progress")
         self.assertContains(response, 'id="task-status-')
         self.assertContains(response, "In Progress")
+        self.assertEqual(response.headers.get("HX-Trigger"), "taskStatusChanged")
 
     def test_status_update_invalid_status_htmx(self):
         self.client.force_login(self.admin)
@@ -1411,20 +1412,105 @@ class ProjectTaskListHtmxTests(TestCase):
         self.assertContains(response_all, "Old Archived Item")
         self.assertContains(response_all, "Searchable Feature Alpha")
 
+    def test_invalid_get_parameters_do_not_cause_500(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url,
+            {
+                "assignee": "not_an_int",
+                "is_overdue": "invalid_junk",
+                "status": "bogus_status",
+                "priority": "unknown_priority",
+                "due_before": "bad-date-format",
+                "due_after": "another-bad-date",
+                "page": "invalid_page_number",
+            },
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+
+    def test_clear_filters_sync_reset(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url,
+            {"clear": "1"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="task-filter-wrapper" hx-swap-oob="innerHTML"')
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertContains(response, "UI Component Beta")
+
+    def test_status_change_consistency_with_active_filter(self):
+        self.client.force_login(self.owner)
+        # Initially task1 has status todo
+        response_todo = self.client.get(
+            self.list_url,
+            {"status": "todo"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertContains(response_todo, "Searchable Feature Alpha")
+
+        # Now change task1 status to done
+        status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task1.slug,
+            },
+        )
+        update_resp = self.client.post(
+            status_url,
+            {"status": "done"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(update_resp.status_code, 200)
+        self.assertEqual(update_resp.headers.get("HX-Trigger"), "taskStatusChanged")
+
+        # Re-fetching with status=todo (simulating taskStatusChanged) excludes task1
+        response_todo_after = self.client.get(
+            self.list_url,
+            {"status": "todo"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertNotContains(response_todo_after, "Searchable Feature Alpha")
+
 
 class HtmxSessionExpiryMiddlewareTests(TestCase):
     def setUp(self):
         self.owner = User.objects.create_user(username="owner", password="secret123")
+        self.member = User.objects.create_user(username="member", password="secret123")
         self.workspace = create_workspace(owner=self.owner, name="Engineering")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
         self.project = create_project(
             workspace=self.workspace,
             name="Platform",
             description="Core platform",
             created_by=self.owner,
         )
+        self.task = create_task(
+            project=self.project,
+            title="Secret Task",
+            description="",
+            priority="high",
+            due_date=None,
+            assignee=self.owner,
+            created_by=self.owner,
+        )
         self.list_url = reverse(
             "project-task-list",
             kwargs={"workspace_slug": self.workspace.slug, "project_slug": self.project.slug},
+        )
+        self.status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task.slug,
+            },
         )
 
     def test_htmx_unauthenticated_request_redirects_via_header(self):
@@ -1437,6 +1523,18 @@ class HtmxSessionExpiryMiddlewareTests(TestCase):
         response = self.client.get(self.list_url)
         self.assertEqual(response.status_code, 302)
         self.assertIn("/accounts/login/", response.headers["Location"])
+
+    def test_authenticated_user_403_does_not_redirect_to_login(self):
+        # Member does not have permission to change status of task assigned to owner
+        self.client.force_login(self.member)
+        response = self.client.post(
+            self.status_url,
+            {"status": "done"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertNotIn("HX-Redirect", response.headers)
+        self.assertNotIn("Location", response.headers)
 
 
 

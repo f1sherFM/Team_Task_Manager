@@ -73,13 +73,7 @@
     </footer>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{% static 'vendor/htmx.min.js' %}"></script>
-    <script>
-        htmx.config.allowEval = false;
-        document.body.addEventListener('htmx:responseError', function (evt) {
-            if (evt.detail.xhr.status === 401 || evt.detail.xhr.status === 403) {
-                window.location.href = "{% url 'login' %}?next=" + encodeURIComponent(window.location.pathname);
-            }
-        });
-    </script>
+    <script src="{% static 'js/app.js' %}"></script>
+    <div id="ttm-toast-container" class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 1090;"></div>
 </body>
 </html>

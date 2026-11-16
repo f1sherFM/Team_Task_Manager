@@ -1,0 +1,95 @@
+<form id="task-filter-form"
+      method="get"
+      action="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+      hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+      hx-target="#task-list-container"
+      hx-swap="outerHTML"
+      hx-trigger="input delay:300ms from:#task-search-input, change from:select, taskStatusChanged from:body"
+      hx-sync="closest form:replace"
+      hx-push-url="true"
+      hx-indicator="#filter-spinner"
+      class="card border-0 shadow-sm p-3 mb-4">
+    <div class="row g-2 align-items-center">
+        <div class="col-12 col-md-4">
+            <div class="input-group">
+                <span class="input-group-text bg-transparent border-end-0">
+                    <span id="filter-spinner" class="spinner-border spinner-border-sm htmx-indicator text-primary" role="status" aria-hidden="true"></span>
+                    <svg class="bi" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                        <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                    </svg>
+                </span>
+                <input type="text"
+                       id="task-search-input"
+                       name="search"
+                       class="form-control border-start-0"
+                       placeholder="Search tasks..."
+                       value="{{ current_filters.search }}"
+                       autocomplete="off">
+            </div>
+        </div>
+        <div class="col-6 col-sm-4 col-md-2">
+            <select name="status" class="form-select form-select-sm">
+                <option value="">All statuses</option>
+                <option value="todo" {% if current_filters.status == "todo" %}selected{% endif %}>To Do</option>
+                <option value="in_progress" {% if current_filters.status == "in_progress" %}selected{% endif %}>In Progress</option>
+                <option value="done" {% if current_filters.status == "done" %}selected{% endif %}>Done</option>
+            </select>
+        </div>
+        <div class="col-6 col-sm-4 col-md-2">
+            <select name="priority" class="form-select form-select-sm">
+                <option value="">All priorities</option>
+                <option value="low" {% if current_filters.priority == "low" %}selected{% endif %}>Low</option>
+                <option value="medium" {% if current_filters.priority == "medium" %}selected{% endif %}>Medium</option>
+                <option value="high" {% if current_filters.priority == "high" %}selected{% endif %}>High</option>
+            </select>
+        </div>
+        <div class="col-6 col-sm-4 col-md-2">
+            <select name="assignee" class="form-select form-select-sm">
+                <option value="">All assignees</option>
+                <option value="unassigned" {% if current_filters.assignee == "unassigned" %}selected{% endif %}>Unassigned</option>
+                {% for member in members %}
+                    <option value="{{ member.id }}" {% if current_filters.assignee == member.id|stringformat:"s" %}selected{% endif %}>
+                        {{ member.username }}
+                    </option>
+                {% endfor %}
+            </select>
+        </div>
+        {% if project_tags %}
+            <div class="col-6 col-sm-4 col-md-2">
+                <select name="tag" class="form-select form-select-sm">
+                    <option value="">All tags</option>
+                    {% for tag in project_tags %}
+                        <option value="{{ tag.slug }}" {% if current_filters.tag == tag.slug %}selected{% endif %}>
+                            {{ tag.name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        {% endif %}
+        <div class="col-6 col-sm-4 col-md-2">
+            <select name="is_overdue" class="form-select form-select-sm">
+                <option value="">All deadlines</option>
+                <option value="true" {% if current_filters.is_overdue == "true" %}selected{% endif %}>Overdue only</option>
+            </select>
+        </div>
+        <div class="col-6 col-sm-4 col-md-2">
+            <select name="is_archived" class="form-select form-select-sm">
+                <option value="0" {% if current_filters.is_archived == "0" or not current_filters.is_archived %}selected{% endif %}>Active</option>
+                <option value="1" {% if current_filters.is_archived == "1" %}selected{% endif %}>Archived</option>
+                <option value="all" {% if current_filters.is_archived == "all" %}selected{% endif %}>All</option>
+            </select>
+        </div>
+        {% if current_filters.search or current_filters.status or current_filters.priority or current_filters.assignee or current_filters.tag or current_filters.is_overdue or current_filters.is_archived != "0" and current_filters.is_archived %}
+            <div class="col-auto ms-auto">
+                <a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+                   class="btn btn-sm btn-outline-secondary btn-clear-filters"
+                   hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}?clear=1"
+                   hx-target="#task-list-container"
+                   hx-swap="outerHTML"
+                   hx-push-url="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">
+                    Clear
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</form>

@@ -4,7 +4,7 @@ from django.utils import timezone
 
 from core.selectors import parse_bool_query, parse_date_query
 from projects.models import Project
-from tasks.models import Task, TaskChecklistItem, TaskTag
+from tasks.models import Task, TaskChecklistItem, TaskPriority, TaskStatus, TaskTag
 from workspaces.models import Workspace
 
 User = get_user_model()
@@ -95,39 +95,62 @@ def filter_tasks(
         queryset = queryset.filter(project__workspace__slug=workspace_slug)
     if project_slug:
         queryset = queryset.filter(project__slug=project_slug)
-    if status_value:
+    if status_value and status_value in TaskStatus.values:
         queryset = queryset.filter(status=status_value)
-    if priority:
+    if priority and priority in TaskPriority.values:
         queryset = queryset.filter(priority=priority)
     if assignee_id:
         if assignee_id in ("unassigned", "none"):
             queryset = queryset.filter(assignee__isnull=True)
         else:
-            queryset = queryset.filter(assignee_id=assignee_id)
+            try:
+                valid_assignee_id = int(assignee_id)
+                if valid_assignee_id > 0:
+                    queryset = queryset.filter(assignee_id=valid_assignee_id)
+                else:
+                    raise ValueError(f"Invalid integer value for assignee: {assignee_id}.")
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Invalid integer value for assignee: {assignee_id}.") from exc
     if created_by_id:
-        queryset = queryset.filter(created_by_id=created_by_id)
+        try:
+            valid_creator_id = int(created_by_id)
+            if valid_creator_id > 0:
+                queryset = queryset.filter(created_by_id=valid_creator_id)
+            else:
+                raise ValueError(f"Invalid integer value for created_by: {created_by_id}.")
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"Invalid integer value for created_by: {created_by_id}.") from exc
     if is_archived is not None:
         queryset = queryset.filter(is_archived=is_archived)
     if tag_slug:
-        queryset = queryset.filter(tags__slug=tag_slug)
+        cleaned_tag = tag_slug.strip()
+        if cleaned_tag:
+            queryset = queryset.filter(tags__slug=cleaned_tag)
 
     parsed_due_before = parse_date_query(due_before, param_name="due_before")
-    parsed_due_after = parse_date_query(due_after, param_name="due_after")
     if parsed_due_before is not None:
         queryset = queryset.filter(due_date__lte=parsed_due_before)
+
+    parsed_due_after = parse_date_query(due_after, param_name="due_after")
     if parsed_due_after is not None:
         queryset = queryset.filter(due_date__gte=parsed_due_after)
 
     overdue_filter = parse_bool_query(is_overdue, param_name="is_overdue")
     if overdue_filter is True:
-        queryset = queryset.filter(due_date__lt=timezone.localdate()).exclude(status="done")
+        queryset = queryset.filter(
+            due_date__lt=timezone.localdate()
+        ).exclude(status="done")
     elif overdue_filter is False:
-        queryset = queryset.exclude(due_date__lt=timezone.localdate()).exclude(status="done")
+        queryset = queryset.exclude(
+            due_date__lt=timezone.localdate()
+        ).exclude(status="done")
 
     if search:
-        queryset = queryset.filter(
-            Q(title__icontains=search)
-            | Q(description__icontains=search)
-            | Q(slug__icontains=search)
-        )
+        search_term = search.strip()
+        if search_term:
+            queryset = queryset.filter(
+                Q(title__icontains=search_term)
+                | Q(description__icontains=search_term)
+                | Q(slug__icontains=search_term)
+            )
     return queryset

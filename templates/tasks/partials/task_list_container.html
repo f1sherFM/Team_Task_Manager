@@ -1,4 +1,9 @@
 <div id="task-list-container">
+    {% if is_cleared %}
+        <div id="task-filter-wrapper" hx-swap-oob="innerHTML">
+            {% include "tasks/partials/task_filter_form.html" %}
+        </div>
+    {% endif %}
     <div class="row g-4">
         {% for task in tasks %}
             {% include "tasks/partials/task_card.html" with task=task can_change_status=can_change_task_status %}
@@ -15,11 +20,11 @@
                     </p>
                     {% if current_filters.search or current_filters.status or current_filters.priority or current_filters.tag or current_filters.assignee or current_filters.is_overdue or current_filters.is_archived != "0" and current_filters.is_archived %}
                         <a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
-                           class="btn btn-sm btn-outline-secondary"
-                           hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+                           class="btn btn-sm btn-outline-secondary btn-clear-filters"
+                           hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}?clear=1"
                            hx-target="#task-list-container"
                            hx-swap="outerHTML"
-                           hx-push-url="true">
+                           hx-push-url="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}">
                             Clear all filters
                         </a>
                     {% endif %}

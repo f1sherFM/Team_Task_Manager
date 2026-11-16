@@ -190,6 +190,7 @@ class CommentViewTests(TestCase):
         self.client.force_login(self.member)
         response = self.client.post(delete_url, headers={"HX-Request": "true"})
         self.assertEqual(response.status_code, 403)
+        self.assertNotIn("HX-Redirect", response.headers)
         comment.refresh_from_db()
         self.assertFalse(comment.is_deleted)
 
