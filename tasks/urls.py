@@ -1,6 +1,11 @@
 from django.urls import path
 
-from tasks.views import ProjectTaskListView, TaskDetailView, TaskUpdateView
+from tasks.views import (
+    ProjectTaskListView,
+    TaskDetailView,
+    TaskStatusUpdateView,
+    TaskUpdateView,
+)
 
 urlpatterns = [
     path(
@@ -17,5 +22,10 @@ urlpatterns = [
         "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/edit/",
         TaskUpdateView.as_view(),
         name="task-edit",
+    ),
+    path(
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/<slug:task_slug>/status/",
+        TaskStatusUpdateView.as_view(),
+        name="task-status-update",
     ),
 ]

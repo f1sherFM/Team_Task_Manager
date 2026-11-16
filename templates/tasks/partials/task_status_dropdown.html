@@ -1,0 +1,83 @@
+<div class="d-inline-flex align-items-center" id="task-status-{{ task.id }}">
+    {% if not task.is_archived and not task.project.is_archived %}
+        {% if can_change_status or is_workspace_admin or task.assignee_id == request.user.id %}
+            <div class="dropdown">
+                <button class="btn btn-sm dropdown-toggle task-status-btn d-inline-flex align-items-center gap-1 {% if task.status == 'done' %}btn-success{% elif task.status == 'in_progress' %}btn-primary{% else %}btn-secondary{% endif %}"
+                        type="button"
+                        data-bs-toggle="dropdown"
+                        aria-expanded="false"
+                        title="Click to change status">
+                    {% if task.status == "done" %}
+                        Done
+                    {% elif task.status == "in_progress" %}
+                        In Progress
+                    {% else %}
+                        To Do
+                    {% endif %}
+                </button>
+                <span id="task-status-spinner-{{ task.id }}" class="spinner-border spinner-border-sm htmx-indicator ms-1" role="status" aria-hidden="true"></span>
+                <ul class="dropdown-menu shadow-sm">
+                    <li><h6 class="dropdown-header">Change Status</h6></li>
+                    <li>
+                        <button class="dropdown-item d-flex align-items-center justify-content-between {% if task.status == 'todo' %}active{% endif %}"
+                                type="button"
+                                hx-post="{% url 'task-status-update' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}"
+                                hx-vals='{"status": "todo"}'
+                                hx-target="#task-status-{{ task.id }}"
+                                hx-swap="outerHTML"
+                                hx-indicator="#task-status-spinner-{{ task.id }}"
+                                hx-disabled-elt="this">
+                            <span>To Do</span>
+                            {% if task.status == "todo" %}&#10003;{% endif %}
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item d-flex align-items-center justify-content-between {% if task.status == 'in_progress' %}active{% endif %}"
+                                type="button"
+                                hx-post="{% url 'task-status-update' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}"
+                                hx-vals='{"status": "in_progress"}'
+                                hx-target="#task-status-{{ task.id }}"
+                                hx-swap="outerHTML"
+                                hx-indicator="#task-status-spinner-{{ task.id }}"
+                                hx-disabled-elt="this">
+                            <span>In Progress</span>
+                            {% if task.status == "in_progress" %}&#10003;{% endif %}
+                        </button>
+                    </li>
+                    <li>
+                        <button class="dropdown-item d-flex align-items-center justify-content-between {% if task.status == 'done' %}active{% endif %}"
+                                type="button"
+                                hx-post="{% url 'task-status-update' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}"
+                                hx-vals='{"status": "done"}'
+                                hx-target="#task-status-{{ task.id }}"
+                                hx-swap="outerHTML"
+                                hx-indicator="#task-status-spinner-{{ task.id }}"
+                                hx-disabled-elt="this">
+                            <span>Done</span>
+                            {% if task.status == "done" %}&#10003;{% endif %}
+                        </button>
+                    </li>
+                </ul>
+            </div>
+        {% else %}
+            {% if task.status == "done" %}
+                <span class="badge text-bg-success">Done</span>
+            {% elif task.status == "in_progress" %}
+                <span class="badge text-bg-primary">In Progress</span>
+            {% else %}
+                <span class="badge text-bg-secondary">To Do</span>
+            {% endif %}
+        {% endif %}
+    {% else %}
+        {% if task.status == "done" %}
+            <span class="badge text-bg-success">Done</span>
+        {% elif task.status == "in_progress" %}
+            <span class="badge text-bg-primary">In Progress</span>
+        {% else %}
+            <span class="badge text-bg-secondary">To Do</span>
+        {% endif %}
+        {% if task.is_archived %}
+            <span class="badge text-bg-warning ms-1" title="Task is archived">Archived</span>
+        {% endif %}
+    {% endif %}
+</div>

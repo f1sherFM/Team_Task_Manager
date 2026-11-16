@@ -15,6 +15,103 @@
         <a class="btn btn-outline-secondary" href="{% url 'project-detail' workspace_slug=project.workspace.slug project_slug=project.slug %}">Back to project</a>
     </div>
 
+    <!-- Search and Filter Bar -->
+    <form id="task-filter-form"
+          method="get"
+          action="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+          hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+          hx-target="#task-list-container"
+          hx-swap="outerHTML"
+          hx-trigger="input delay:300ms from:#task-search-input, change from:select"
+          hx-sync="closest form:replace"
+          hx-push-url="true"
+          hx-indicator="#filter-spinner"
+          class="card border-0 shadow-sm p-3 mb-4">
+        <div class="row g-2 align-items-center">
+            <div class="col-12 col-md-4">
+                <div class="input-group">
+                    <span class="input-group-text bg-transparent border-end-0">
+                        <span id="filter-spinner" class="spinner-border spinner-border-sm htmx-indicator text-primary" role="status" aria-hidden="true"></span>
+                        <svg class="bi" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0"/>
+                        </svg>
+                    </span>
+                    <input type="text"
+                           id="task-search-input"
+                           name="search"
+                           class="form-control border-start-0"
+                           placeholder="Search tasks..."
+                           value="{{ current_filters.search }}"
+                           autocomplete="off">
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <select name="status" class="form-select form-select-sm">
+                    <option value="">All statuses</option>
+                    <option value="todo" {% if current_filters.status == "todo" %}selected{% endif %}>To Do</option>
+                    <option value="in_progress" {% if current_filters.status == "in_progress" %}selected{% endif %}>In Progress</option>
+                    <option value="done" {% if current_filters.status == "done" %}selected{% endif %}>Done</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <select name="priority" class="form-select form-select-sm">
+                    <option value="">All priorities</option>
+                    <option value="low" {% if current_filters.priority == "low" %}selected{% endif %}>Low</option>
+                    <option value="medium" {% if current_filters.priority == "medium" %}selected{% endif %}>Medium</option>
+                    <option value="high" {% if current_filters.priority == "high" %}selected{% endif %}>High</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <select name="assignee" class="form-select form-select-sm">
+                    <option value="">All assignees</option>
+                    <option value="unassigned" {% if current_filters.assignee == "unassigned" %}selected{% endif %}>Unassigned</option>
+                    {% for member in members %}
+                        <option value="{{ member.id }}" {% if current_filters.assignee == member.id|stringformat:"s" %}selected{% endif %}>
+                            {{ member.username }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% if project_tags %}
+                <div class="col-6 col-sm-4 col-md-2">
+                    <select name="tag" class="form-select form-select-sm">
+                        <option value="">All tags</option>
+                        {% for tag in project_tags %}
+                            <option value="{{ tag.slug }}" {% if current_filters.tag == tag.slug %}selected{% endif %}>
+                                {{ tag.name }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            {% endif %}
+            <div class="col-6 col-sm-4 col-md-2">
+                <select name="is_overdue" class="form-select form-select-sm">
+                    <option value="">All deadlines</option>
+                    <option value="true" {% if current_filters.is_overdue == "true" %}selected{% endif %}>Overdue only</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2">
+                <select name="is_archived" class="form-select form-select-sm">
+                    <option value="0" {% if current_filters.is_archived == "0" or not current_filters.is_archived %}selected{% endif %}>Active</option>
+                    <option value="1" {% if current_filters.is_archived == "1" %}selected{% endif %}>Archived</option>
+                    <option value="all" {% if current_filters.is_archived == "all" %}selected{% endif %}>All</option>
+                </select>
+            </div>
+            {% if current_filters.search or current_filters.status or current_filters.priority or current_filters.assignee or current_filters.tag or current_filters.is_overdue or current_filters.is_archived != "0" and current_filters.is_archived %}
+                <div class="col-auto ms-auto">
+                    <a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+                       class="btn btn-sm btn-outline-secondary"
+                       hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+                       hx-target="#task-list-container"
+                       hx-swap="outerHTML"
+                       hx-push-url="true">
+                        Clear
+                    </a>
+                </div>
+            {% endif %}
+        </div>
+    </form>
+
     <div class="row g-4">
         {% if is_project_archived %}
             <div class="col-12">
@@ -23,54 +120,9 @@
                 </div>
             </div>
         {% endif %}
+
         <div class="{% if can_create_task %}col-xl-8{% else %}col-12{% endif %}">
-            <div class="row g-4">
-                {% for task in tasks %}
-                    <div class="col-md-6">
-                        <div class="card border-0 shadow-sm h-100">
-                            <div class="card-body d-flex flex-column">
-                                <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
-                                    <h2 class="h5 mb-0">
-                                        <a class="text-decoration-none" href="{% url 'task-detail' workspace_slug=project.workspace.slug project_slug=project.slug task_slug=task.slug %}">
-                                            {{ task.title }}
-                                        </a>
-                                    </h2>
-                                    {% if task.priority == "high" %}
-                                        <span class="badge text-bg-danger">High</span>
-                                    {% elif task.priority == "medium" %}
-                                        <span class="badge text-bg-warning">Medium</span>
-                                    {% else %}
-                                        <span class="badge text-bg-light border text-dark">Low</span>
-                                    {% endif %}
-                                </div>
-                                <div class="d-flex flex-wrap gap-2 mb-3">
-                                    {% if task.status == "done" %}
-                                        <span class="badge text-bg-success">Done</span>
-                                    {% elif task.status == "in_progress" %}
-                                        <span class="badge text-bg-primary">In Progress</span>
-                                    {% else %}
-                                        <span class="badge text-bg-secondary">To Do</span>
-                                    {% endif %}
-                                    <span class="badge text-bg-secondary">{{ task.assignee.username|default:"Unassigned" }}</span>
-                                </div>
-                                <p class="text-body-secondary small mb-4">{{ task.description|default:"No description provided."|truncatechars:120 }}</p>
-                                <a class="btn btn-outline-primary mt-auto" href="{% url 'task-detail' workspace_slug=project.workspace.slug project_slug=project.slug task_slug=task.slug %}">Open task</a>
-                            </div>
-                        </div>
-                    </div>
-                {% empty %}
-                    <div class="col-12">
-                        <div class="alert alert-light border shadow-sm text-center py-4 mb-0">
-                            <h2 class="h5 mb-2">No tasks yet.</h2>
-                            <p class="text-body-secondary mb-3">Create the first task to start tracking work in this project.</p>
-                            {% if can_create_task %}
-                                <button type="button" class="btn btn-sm btn-outline-primary" disabled>Use the form to create a task</button>
-                            {% endif %}
-                        </div>
-                    </div>
-                {% endfor %}
-            </div>
-            {% include "includes/pagination.html" %}
+            {% include "tasks/partials/task_list_container.html" %}
         </div>
 
         {% if can_create_task %}

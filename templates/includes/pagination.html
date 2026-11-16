@@ -1,9 +1,13 @@
+{% load core_tags %}
 {% if page_obj and page_obj.has_other_pages %}
 <nav aria-label="Page navigation" class="mt-4">
     <ul class="pagination justify-content-center mb-0">
         {% if page_obj.has_previous %}
             <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.previous_page_number }}" aria-label="Previous">
+                <a class="page-link"
+                   href="?{% url_replace page=page_obj.previous_page_number %}"
+                   {% if htmx_target %}hx-get="?{% url_replace page=page_obj.previous_page_number %}" hx-target="{{ htmx_target }}" hx-swap="outerHTML" hx-push-url="true"{% endif %}
+                   aria-label="Previous">
                     &laquo; Previous
                 </a>
             </li>
@@ -20,14 +24,21 @@
                 </li>
             {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
                 <li class="page-item">
-                    <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                    <a class="page-link"
+                       href="?{% url_replace page=num %}"
+                       {% if htmx_target %}hx-get="?{% url_replace page=num %}" hx-target="{{ htmx_target }}" hx-swap="outerHTML" hx-push-url="true"{% endif %}>
+                        {{ num }}
+                    </a>
                 </li>
             {% endif %}
         {% endfor %}
 
         {% if page_obj.has_next %}
             <li class="page-item">
-                <a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="Next">
+                <a class="page-link"
+                   href="?{% url_replace page=page_obj.next_page_number %}"
+                   {% if htmx_target %}hx-get="?{% url_replace page=page_obj.next_page_number %}" hx-target="{{ htmx_target }}" hx-swap="outerHTML" hx-push-url="true"{% endif %}
+                   aria-label="Next">
                     Next &raquo;
                 </a>
             </li>

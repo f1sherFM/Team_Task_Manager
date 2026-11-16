@@ -43,6 +43,8 @@ class WorkspaceAccessMixin(LoginRequiredMixin):
     workspace = None
 
     def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
         try:
             self.workspace = get_user_workspace_by_slug(
                 slug=kwargs["slug"],

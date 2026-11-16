@@ -1,0 +1,31 @@
+<div id="task-list-container">
+    <div class="row g-4">
+        {% for task in tasks %}
+            {% include "tasks/partials/task_card.html" with task=task can_change_status=can_change_task_status %}
+        {% empty %}
+            <div class="col-12">
+                <div class="alert alert-light border shadow-sm text-center py-5 mb-0">
+                    <h2 class="h5 mb-2">No tasks found.</h2>
+                    <p class="text-body-secondary mb-3">
+                        {% if current_filters.search or current_filters.status or current_filters.priority or current_filters.tag or current_filters.assignee or current_filters.is_overdue or current_filters.is_archived != "0" and current_filters.is_archived %}
+                            No tasks match your filter criteria. Try clearing the filters.
+                        {% else %}
+                            Create the first task to start tracking work in this project.
+                        {% endif %}
+                    </p>
+                    {% if current_filters.search or current_filters.status or current_filters.priority or current_filters.tag or current_filters.assignee or current_filters.is_overdue or current_filters.is_archived != "0" and current_filters.is_archived %}
+                        <a href="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+                           class="btn btn-sm btn-outline-secondary"
+                           hx-get="{% url 'project-task-list' workspace_slug=project.workspace.slug project_slug=project.slug %}"
+                           hx-target="#task-list-container"
+                           hx-swap="outerHTML"
+                           hx-push-url="true">
+                            Clear all filters
+                        </a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    </div>
+    {% include "includes/pagination.html" with htmx_target="#task-list-container" %}
+</div>

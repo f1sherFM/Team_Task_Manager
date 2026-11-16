@@ -1,5 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
+from django.urls import reverse
+from django.utils import timezone
 
 from activity.models import ActivityLog
 from comments.models import Comment
@@ -1133,6 +1135,309 @@ class DjangoAdminIntegrationTests(TestCase):
         self.task.refresh_from_db()
         self.assertEqual(self.task.title, orig_title)
         self.assertEqual(list(self.task.tags.all()), [self.tag])
+
+
+class TaskStatusUpdateViewTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="owner", password="secret123")
+        self.admin = User.objects.create_user(username="admin", password="secret123")
+        self.assignee = User.objects.create_user(username="assignee", password="secret123")
+        self.member = User.objects.create_user(username="member", password="secret123")
+        self.outsider = User.objects.create_user(username="outsider", password="secret123")
+
+        self.workspace = create_workspace(owner=self.owner, name="Engineering")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.admin, role=MembershipRole.ADMIN
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.assignee, role=MembershipRole.MEMBER
+        )
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+
+        self.project = create_project(
+            workspace=self.workspace,
+            name="Platform",
+            description="Core platform",
+            created_by=self.owner,
+        )
+        self.task = create_task(
+            project=self.project,
+            title="Deploy pipeline",
+            description="Set up CI/CD",
+            priority="high",
+            due_date=None,
+            assignee=self.assignee,
+            created_by=self.owner,
+        )
+        self.status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task.slug,
+            },
+        )
+
+    def test_status_update_standard_redirect(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(self.status_url, {"status": "done"})
+        self.assertEqual(response.status_code, 302)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "done")
+        self.assertTrue(
+            ActivityLog.objects.filter(
+                workspace=self.workspace,
+                action="task_status_changed",
+                metadata__status="done",
+            ).exists()
+        )
+
+    def test_status_update_htmx_success(self):
+        self.client.force_login(self.assignee)
+        response = self.client.post(
+            self.status_url,
+            {"status": "in_progress"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "in_progress")
+        self.assertContains(response, 'id="task-status-')
+        self.assertContains(response, "In Progress")
+
+    def test_status_update_invalid_status_htmx(self):
+        self.client.force_login(self.admin)
+        response = self.client.post(
+            self.status_url,
+            {"status": "invalid_status"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "todo")
+
+    def test_status_update_unauthorized_member_htmx(self):
+        self.client.force_login(self.member)
+        response = self.client.post(
+            self.status_url,
+            {"status": "done"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.task.refresh_from_db()
+        self.assertEqual(self.task.status, "todo")
+
+    def test_status_update_archived_task_rejected(self):
+        archive_task(task=self.task, actor=self.owner)
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.status_url,
+            {"status": "done"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_status_update_archived_project_rejected(self):
+        archive_project(project=self.project, actor=self.owner)
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.status_url,
+            {"status": "done"},
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 403)
+
+
+class ProjectTaskListHtmxTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="owner", password="secret123")
+        self.member = User.objects.create_user(username="member", password="secret123")
+        self.workspace = create_workspace(owner=self.owner, name="Engineering")
+        Membership.objects.create(
+            workspace=self.workspace, user=self.member, role=MembershipRole.MEMBER
+        )
+
+        self.project = create_project(
+            workspace=self.workspace,
+            name="Platform",
+            description="Core platform",
+            created_by=self.owner,
+        )
+        self.tag_backend = create_task_tag(
+            workspace=self.workspace, name="Backend", color="#112233", actor=self.owner
+        )
+        self.tag_frontend = create_task_tag(
+            workspace=self.workspace, name="Frontend", color="#445566", actor=self.owner
+        )
+
+        today = timezone.localdate()
+        self.task1 = create_task(
+            project=self.project,
+            title="Searchable Feature Alpha",
+            description="Backend implementation",
+            priority="high",
+            due_date=today - timezone.timedelta(days=2),  # overdue
+            assignee=self.member,
+            created_by=self.owner,
+            tags=[self.tag_backend],
+        )
+        self.task2 = create_task(
+            project=self.project,
+            title="UI Component Beta",
+            description="Frontend design",
+            priority="low",
+            due_date=today + timezone.timedelta(days=5),
+            assignee=None,
+            created_by=self.owner,
+            tags=[self.tag_frontend],
+        )
+        change_task_status(task=self.task2, status="done", actor=self.owner)
+
+        self.task_archived = create_task(
+            project=self.project,
+            title="Old Archived Item",
+            description="No longer needed",
+            priority="medium",
+            due_date=None,
+            assignee=None,
+            created_by=self.owner,
+        )
+        archive_task(task=self.task_archived, actor=self.owner)
+
+        self.list_url = reverse(
+            "project-task-list",
+            kwargs={"workspace_slug": self.workspace.slug, "project_slug": self.project.slug},
+        )
+
+    def test_task_list_standard_renders_full_page(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="task-filter-form"')
+        self.assertContains(response, 'id="task-list-container"')
+        self.assertContains(response, "Searchable Feature Alpha")
+
+    def test_task_list_htmx_renders_container_only(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(self.list_url, headers={"HX-Request": "true"})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="task-list-container"')
+        self.assertNotContains(response, 'id="task-filter-form"')
+        self.assertNotContains(response, "<!DOCTYPE html>")
+
+    def test_live_search_by_title_or_desc(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url, {"search": "Alpha"}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertNotContains(response, "UI Component Beta")
+
+    def test_filter_by_status(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url, {"status": "done"}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "UI Component Beta")
+        self.assertNotContains(response, "Searchable Feature Alpha")
+
+    def test_filter_by_priority(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url, {"priority": "high"}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertNotContains(response, "UI Component Beta")
+
+    def test_filter_by_tag(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url, {"tag": self.tag_backend.slug}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertNotContains(response, "UI Component Beta")
+
+    def test_filter_by_assignee(self):
+        self.client.force_login(self.owner)
+        # Assigned to member
+        response = self.client.get(
+            self.list_url, {"assignee": str(self.member.id)}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertNotContains(response, "UI Component Beta")
+
+        # Unassigned
+        response2 = self.client.get(
+            self.list_url, {"assignee": "unassigned"}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response2.status_code, 200)
+        self.assertContains(response2, "UI Component Beta")
+        self.assertNotContains(response2, "Searchable Feature Alpha")
+
+    def test_filter_by_is_overdue(self):
+        self.client.force_login(self.owner)
+        response = self.client.get(
+            self.list_url, {"is_overdue": "true"}, headers={"HX-Request": "true"}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertNotContains(response, "UI Component Beta")
+
+    def test_filter_by_is_archived(self):
+        self.client.force_login(self.owner)
+        # Default: active only
+        response = self.client.get(self.list_url, headers={"HX-Request": "true"})
+        self.assertContains(response, "Searchable Feature Alpha")
+        self.assertNotContains(response, "Old Archived Item")
+
+        # Archived only:
+        response_archived = self.client.get(
+            self.list_url, {"is_archived": "1"}, headers={"HX-Request": "true"}
+        )
+        self.assertContains(response_archived, "Old Archived Item")
+        self.assertNotContains(response_archived, "Searchable Feature Alpha")
+
+        # All:
+        response_all = self.client.get(
+            self.list_url, {"is_archived": "all"}, headers={"HX-Request": "true"}
+        )
+        self.assertContains(response_all, "Old Archived Item")
+        self.assertContains(response_all, "Searchable Feature Alpha")
+
+
+class HtmxSessionExpiryMiddlewareTests(TestCase):
+    def setUp(self):
+        self.owner = User.objects.create_user(username="owner", password="secret123")
+        self.workspace = create_workspace(owner=self.owner, name="Engineering")
+        self.project = create_project(
+            workspace=self.workspace,
+            name="Platform",
+            description="Core platform",
+            created_by=self.owner,
+        )
+        self.list_url = reverse(
+            "project-task-list",
+            kwargs={"workspace_slug": self.workspace.slug, "project_slug": self.project.slug},
+        )
+
+    def test_htmx_unauthenticated_request_redirects_via_header(self):
+        response = self.client.get(self.list_url, headers={"HX-Request": "true"})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("HX-Redirect", response.headers)
+        self.assertIn("/accounts/login/", response.headers["HX-Redirect"])
+
+    def test_non_htmx_unauthenticated_request_standard_302(self):
+        response = self.client.get(self.list_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response.headers["Location"])
+
 
 
 

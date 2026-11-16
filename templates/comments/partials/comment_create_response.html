@@ -1,0 +1,34 @@
+<div id="comment-form-container">
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+            <h2 class="h5 mb-3">Add comment</h2>
+            {% if comment_form %}
+                <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}"
+                      method="post"
+                      class="ttm-form"
+                      hx-post="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}"
+                      hx-target="#comment-form-container"
+                      hx-swap="outerHTML">
+                    {% csrf_token %}
+                    {{ comment_form.as_p }}
+                    <button type="submit" class="btn btn-primary w-100 d-inline-flex justify-content-center align-items-center gap-2" hx-disabled-elt="this">
+                        <span>Add comment</span>
+                        <span class="spinner-border spinner-border-sm htmx-indicator" role="status" aria-hidden="true"></span>
+                    </button>
+                </form>
+            {% else %}
+                <p class="text-body-secondary mb-0">
+                    Comments are read-only while the project is archived.
+                </p>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div hx-swap-oob="beforeend:#comments-list">
+    {% include "comments/partials/comment_item.html" with comment=comment can_delete_comment=True %}
+</div>
+
+<span id="comments-count" class="text-body-secondary small" hx-swap-oob="true">{{ comments_count }} total</span>
+
+<div id="no-comments-message" hx-swap-oob="delete"></div>

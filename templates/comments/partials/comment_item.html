@@ -1,0 +1,27 @@
+<article class="card border-0 shadow-sm" id="comment-{{ comment.id }}">
+    <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
+            <div>
+                <strong>{{ comment.author.username }}</strong>
+                <span class="small text-body-secondary ms-2">{{ comment.created_at|date:"M j, Y H:i" }}</span>
+            </div>
+            {% if not comment.is_deleted and can_delete_comment %}
+                <form action="{% url 'comment-delete' comment_id=comment.id %}"
+                      method="post"
+                      class="m-0"
+                      hx-post="{% url 'comment-delete' comment_id=comment.id %}"
+                      hx-target="#comment-{{ comment.id }}"
+                      hx-swap="outerHTML"
+                      hx-confirm="Are you sure you want to delete this comment?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-sm btn-outline-danger py-0 px-2" style="font-size: 0.75rem;">
+                        Delete
+                    </button>
+                </form>
+            {% endif %}
+        </div>
+        <p class="mb-0 {% if comment.is_deleted %}text-body-secondary fst-italic{% endif %}">
+            {% if comment.is_deleted %}[deleted]{% else %}{{ comment.display_text|default:comment.text }}{% endif %}
+        </p>
+    </div>
+</article>

@@ -14,7 +14,7 @@ from core.permissions import (
 )
 from core.slugs import create_with_unique_slug
 from projects.models import Project
-from tasks.models import Task, TaskChecklistItem, TaskTag
+from tasks.models import Task, TaskChecklistItem, TaskStatus, TaskTag
 from tasks.validators import validate_hex_color
 from workspaces.models import Workspace
 
@@ -111,6 +111,9 @@ def assign_task(*, task: Task, assignee, actor) -> Task:
 
 @transaction.atomic
 def change_task_status(*, task: Task, status: str, actor) -> Task:
+    if status not in TaskStatus.values:
+        raise DomainError(f"Invalid task status '{status}'.")
+
     if task.project.is_archived:
         raise DomainError("Tasks cannot be changed in archived projects.")
 

@@ -18,26 +18,36 @@
                             {% if can_edit_task %}
                                 <a class="btn btn-outline-primary" href="{% url 'task-edit' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}">Edit task</a>
                             {% else %}
-                                <span class="badge text-bg-secondary">Archived project</span>
+                                <span class="badge text-bg-secondary">{% if task.is_archived %}Archived task{% else %}Archived project{% endif %}</span>
                             {% endif %}
                         </div>
                     </div>
+
+                    {% if task.tags.all %}
+                        <div class="d-flex flex-wrap gap-1 mb-4">
+                            {% for tag in task.tags.all %}
+                                <span class="badge rounded-pill" style="background-color: {{ tag.color }}; color: #fff; font-size: 0.8rem;">
+                                    {{ tag.name }}
+                                </span>
+                            {% endfor %}
+                        </div>
+                    {% endif %}
+
                     {% if is_project_archived %}
                         <div class="alert alert-warning border shadow-sm mb-4">
                             This task belongs to an archived project. Task and comment changes are disabled.
                         </div>
+                    {% elif task.is_archived %}
+                        <div class="alert alert-warning border shadow-sm mb-4">
+                            This task is archived. Task and comment changes are disabled.
+                        </div>
                     {% endif %}
+
                     <div class="row g-3">
                         <div class="col-sm-6 col-xl-3">
                             <div class="p-3 bg-body-tertiary rounded-4 h-100">
                                 <div class="small text-body-secondary mb-1">Status</div>
-                                {% if task.status == "done" %}
-                                    <span class="badge text-bg-success">Done</span>
-                                {% elif task.status == "in_progress" %}
-                                    <span class="badge text-bg-primary">In Progress</span>
-                                {% else %}
-                                    <span class="badge text-bg-secondary">To Do</span>
-                                {% endif %}
+                                {% include "tasks/partials/task_status_dropdown.html" with task=task can_change_status=can_change_status %}
                             </div>
                         </div>
                         <div class="col-sm-6 col-xl-3">
@@ -71,29 +81,17 @@
             <section>
                 <div class="d-flex justify-content-between align-items-center mb-3">
                     <h2 class="h4 mb-0">Comments</h2>
-                    <span class="text-body-secondary small">{{ comments|length }} total</span>
+                    <span id="comments-count" class="text-body-secondary small">{{ comments|length }} total</span>
                 </div>
-                <div class="d-grid gap-3">
+                <div class="d-grid gap-3" id="comments-list">
                     {% for comment in comments %}
-                        <article class="card border-0 shadow-sm">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-start gap-3 mb-2">
-                                    <div>
-                                        <strong>{{ comment.author.username }}</strong>
-                                        <div class="small text-body-secondary">{{ comment.created_at|date:"M j, Y H:i" }}</div>
-                                    </div>
-                                    {% if not comment.is_deleted and comment.id in deletable_comment_ids %}
-                                        <form action="{% url 'comment-delete' comment_id=comment.id %}" method="post" class="m-0">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
-                                        </form>
-                                    {% endif %}
-                                </div>
-                                <p class="mb-0 {% if comment.is_deleted %}text-body-secondary fst-italic{% endif %}">{{ comment.display_text }}</p>
-                            </div>
-                        </article>
+                        {% if comment.id in deletable_comment_ids %}
+                            {% include "comments/partials/comment_item.html" with comment=comment can_delete_comment=True %}
+                        {% else %}
+                            {% include "comments/partials/comment_item.html" with comment=comment can_delete_comment=False %}
+                        {% endif %}
                     {% empty %}
-                        <div class="alert alert-light border shadow-sm text-center py-4 mb-0">
+                        <div class="alert alert-light border shadow-sm text-center py-4 mb-0" id="no-comments-message">
                             <div class="text-body-secondary">No comments yet.</div>
                         </div>
                     {% endfor %}
@@ -116,22 +114,7 @@
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm">
-                <div class="card-body p-4">
-                    <h2 class="h5 mb-3">Add comment</h2>
-                    {% if comment_form %}
-                        <form action="{% url 'comment-create' workspace_slug=task.project.workspace.slug project_slug=task.project.slug task_slug=task.slug %}" method="post" class="ttm-form">
-                            {% csrf_token %}
-                            {{ comment_form.as_p }}
-                            <button type="submit" class="btn btn-primary w-100">Add comment</button>
-                        </form>
-                    {% else %}
-                        <p class="text-body-secondary mb-0">
-                            Comments are read-only while the project is archived.
-                        </p>
-                    {% endif %}
-                </div>
-            </div>
+            {% include "comments/partials/comment_form.html" with task=task comment_form=comment_form %}
         </div>
     </div>
 </section>

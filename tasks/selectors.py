@@ -100,7 +100,10 @@ def filter_tasks(
     if priority:
         queryset = queryset.filter(priority=priority)
     if assignee_id:
-        queryset = queryset.filter(assignee_id=assignee_id)
+        if assignee_id in ("unassigned", "none"):
+            queryset = queryset.filter(assignee__isnull=True)
+        else:
+            queryset = queryset.filter(assignee_id=assignee_id)
     if created_by_id:
         queryset = queryset.filter(created_by_id=created_by_id)
     if is_archived is not None:
