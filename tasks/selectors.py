@@ -195,6 +195,7 @@ def get_kanban_board_tasks(
                 "total_count": 0,
                 "tasks": [],
                 "has_more": False,
+                "next_cursor": None,
                 "next_offset": None,
                 "remaining_count": 0,
             }
@@ -202,10 +203,16 @@ def get_kanban_board_tasks(
 
         col_qs = filtered_qs.filter(status=col_status).order_by("-created_at", "-id")
         total_count = col_qs.count()
-        tasks = list(col_qs[:per_column_limit])
-        has_more = total_count > per_column_limit
+        slice_tasks = list(col_qs[: per_column_limit + 1])
+        has_more = len(slice_tasks) > per_column_limit
+        tasks = slice_tasks[:per_column_limit]
+        next_cursor = (
+            f"{tasks[-1].created_at.isoformat()}__{tasks[-1].id}"
+            if has_more and tasks
+            else None
+        )
         next_offset = per_column_limit if has_more else None
-        remaining_count = max(0, total_count - per_column_limit)
+        remaining_count = max(0, total_count - len(tasks))
 
         board[col_status] = {
             "status": col_status,
@@ -214,6 +221,7 @@ def get_kanban_board_tasks(
             "total_count": total_count,
             "tasks": tasks,
             "has_more": has_more,
+            "next_cursor": next_cursor,
             "next_offset": next_offset,
             "remaining_count": remaining_count,
         }
@@ -225,6 +233,7 @@ def get_kanban_column_page(
     *,
     project: Project,
     status: str,
+    cursor: str | None = None,
     offset: int = 0,
     limit: int = 20,
     priority: str | None = None,
@@ -234,6 +243,8 @@ def get_kanban_column_page(
     is_archived: bool | None = False,
     search: str | None = None,
 ) -> dict:
+    from datetime import datetime
+
     base_qs = get_project_tasks(project=project)
     filtered_qs = filter_tasks(
         base_qs,
@@ -246,17 +257,39 @@ def get_kanban_column_page(
     )
     col_qs = filtered_qs.filter(status=status).order_by("-created_at", "-id")
     total_count = col_qs.count()
-    tasks = list(col_qs[offset : offset + limit])
-    loaded_so_far = offset + len(tasks)
-    has_more = total_count > loaded_so_far
-    next_offset = loaded_so_far if has_more else None
-    remaining_count = max(0, total_count - loaded_so_far)
+
+    if cursor:
+        try:
+            cursor_created_at_str, cursor_id_str = cursor.split("__", 1)
+            cursor_created_at = datetime.fromisoformat(cursor_created_at_str)
+            cursor_id = int(cursor_id_str)
+            col_qs = col_qs.filter(
+                Q(created_at__lt=cursor_created_at)
+                | Q(created_at=cursor_created_at, id__lt=cursor_id)
+            )
+        except (ValueError, TypeError):
+            if offset > 0:
+                col_qs = col_qs[offset:]
+    elif offset > 0:
+        col_qs = col_qs[offset:]
+
+    slice_tasks = list(col_qs[: limit + 1])
+    has_more = len(slice_tasks) > limit
+    tasks = slice_tasks[:limit]
+    next_cursor = (
+        f"{tasks[-1].created_at.isoformat()}__{tasks[-1].id}"
+        if has_more and tasks
+        else None
+    )
+    remaining_count = max(0, col_qs.count() - len(tasks))
+    next_offset = (offset + len(tasks)) if has_more else None
 
     return {
         "status": status,
         "tasks": tasks,
         "total_count": total_count,
         "has_more": has_more,
+        "next_cursor": next_cursor,
         "next_offset": next_offset,
         "remaining_count": remaining_count,
     }

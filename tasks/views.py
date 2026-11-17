@@ -39,6 +39,8 @@ class ProjectTaskAccessMixin(LoginRequiredMixin):
 
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
+            if request.headers.get("X-TTM-Kanban-Drag") == "true":
+                return HttpResponse("Authentication required.", status=401)
             return self.handle_no_permission()
         try:
             self.project = get_workspace_project_by_slug(
@@ -57,6 +59,8 @@ class TaskAccessMixin(LoginRequiredMixin):
 
     def dispatch(self, request, *args, **kwargs):
         if not request.user.is_authenticated:
+            if request.headers.get("X-TTM-Kanban-Drag") == "true":
+                return HttpResponse("Authentication required.", status=401)
             return self.handle_no_permission()
         try:
             self.task = get_project_task_by_slug(
@@ -370,6 +374,22 @@ class KanbanTaskQuickCreateView(ProjectTaskAccessMixin, View):
                 )
             raise PermissionDenied("Task creation requires workspace membership.")
 
+        membership = get_workspace_membership(
+            workspace=self.project.workspace,
+            user=request.user,
+        )
+        is_workspace_admin = has_membership_role(membership, "owner", "admin")
+
+        if status != TaskStatus.TODO and not is_workspace_admin:
+            if is_htmx:
+                return HttpResponse(
+                    "Permission denied. Status change requires admin access or assignee role.",
+                    status=403,
+                )
+            raise PermissionDenied(
+                "Status change requires admin access or assignee role."
+            )
+
         try:
             task = create_task(
                 project=self.project,
@@ -393,11 +413,37 @@ class KanbanTaskQuickCreateView(ProjectTaskAccessMixin, View):
             )
 
         if is_htmx:
-            membership = get_workspace_membership(
-                workspace=self.project.workspace,
-                user=request.user,
-            )
-            is_workspace_admin = has_membership_role(membership, "owner", "admin")
+            filter_search = request.POST.get("filter_search", "").strip() or None
+            filter_priority = request.POST.get("filter_priority", "").strip() or None
+            filter_assignee = request.POST.get("filter_assignee", "").strip() or None
+            filter_tag = request.POST.get("filter_tag", "").strip() or None
+            filter_is_overdue = request.POST.get("filter_is_overdue", "").strip() or None
+            filter_is_archived = request.POST.get("filter_is_archived", "").strip()
+
+            matches_filters = True
+            if filter_search and filter_search.lower() not in task.title.lower():
+                matches_filters = False
+            if filter_priority and task.priority != filter_priority:
+                matches_filters = False
+            if filter_assignee:
+                if filter_assignee == "unassigned" and task.assignee_id is not None:
+                    matches_filters = False
+                elif filter_assignee != "unassigned" and str(task.assignee_id) != filter_assignee:
+                    matches_filters = False
+            if filter_tag:
+                matches_filters = False
+            if filter_is_overdue == "true":
+                matches_filters = False
+            if filter_is_archived == "1":
+                matches_filters = False
+
+            if not matches_filters:
+                response = HttpResponse("", status=200)
+                response["HX-Trigger"] = json.dumps(
+                    {"showMessage": "Task created (hidden by active filters)."}
+                )
+                return response
+
             column_count = get_project_tasks(project=self.project).filter(status=status).count()
             response = render(
                 request,
@@ -431,6 +477,8 @@ class KanbanColumnLoadMoreView(ProjectTaskAccessMixin, View):
         if status not in TaskStatus.values:
             return HttpResponse("Invalid status.", status=400)
 
+        cursor = request.GET.get("cursor", "").strip() or None
+
         try:
             offset = max(0, int(request.GET.get("offset", 0)))
         except (ValueError, TypeError):
@@ -460,6 +508,7 @@ class KanbanColumnLoadMoreView(ProjectTaskAccessMixin, View):
             page_data = get_kanban_column_page(
                 project=self.project,
                 status=status,
+                cursor=cursor,
                 offset=offset,
                 limit=limit,
                 priority=priority,
@@ -473,6 +522,7 @@ class KanbanColumnLoadMoreView(ProjectTaskAccessMixin, View):
             page_data = get_kanban_column_page(
                 project=self.project,
                 status=status,
+                cursor=cursor,
                 offset=offset,
                 limit=limit,
                 is_archived=is_archived,
@@ -489,6 +539,7 @@ class KanbanColumnLoadMoreView(ProjectTaskAccessMixin, View):
             "status": status,
             "tasks": page_data["tasks"],
             "has_more": page_data["has_more"],
+            "next_cursor": page_data["next_cursor"],
             "next_offset": page_data["next_offset"],
             "remaining_count": page_data["remaining_count"],
             "is_workspace_admin": is_workspace_admin,

@@ -1808,6 +1808,115 @@ class KanbanBoardTests(TestCase):
         self.task_todo.status = TaskStatus.DONE
         self.assertFalse(is_task_overdue(self.task_todo))
 
+    def test_kanban_drag_unauthenticated_returns_401(self):
+        status_url = reverse(
+            "task-status-update",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": self.task_todo.slug,
+            },
+        )
+        response = self.client.post(
+            status_url,
+            {"status": "in_progress"},
+            headers={"X-TTM-Kanban-Drag": "true"},
+        )
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Authentication required", response.content.decode("utf-8"))
+
+    def test_kanban_keyset_pagination_no_duplicates_on_insert(self):
+        for i in range(25):
+            create_task(
+                project=self.project,
+                title=f"Initial Task {i}",
+                description="",
+                priority=TaskPriority.MEDIUM,
+                due_date=None,
+                assignee=None,
+                created_by=self.owner,
+            )
+
+        board = get_kanban_board_tasks(project=self.project, per_column_limit=20)
+        todo_col = board["todo"]
+        first_page_tasks = todo_col["tasks"]
+        self.assertEqual(len(first_page_tasks), 20)
+        cursor = todo_col["next_cursor"]
+        self.assertIsNotNone(cursor)
+
+        # Insert 3 new tasks at the top
+        for i in range(3):
+            create_task(
+                project=self.project,
+                title=f"New Task {i}",
+                description="",
+                priority=TaskPriority.HIGH,
+                due_date=None,
+                assignee=None,
+                created_by=self.owner,
+            )
+
+        # Query next page using keyset cursor
+        next_page = get_kanban_column_page(
+            project=self.project,
+            status="todo",
+            cursor=cursor,
+            limit=20,
+        )
+        second_page_tasks = next_page["tasks"]
+        self.assertEqual(len(second_page_tasks), 6)
+        first_ids = {t.id for t in first_page_tasks}
+        second_ids = {t.id for t in second_page_tasks}
+        self.assertEqual(len(first_ids.intersection(second_ids)), 0)
+
+    def test_kanban_quick_create_hidden_when_not_matching_active_filters(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {
+                "title": "Medium Task",
+                "priority": "medium",
+                "status": "todo",
+                "filter_priority": "high",
+            },
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content.decode("utf-8").strip(), "")
+        self.assertIn("hidden by active filters", response.headers.get("HX-Trigger", ""))
+
+        response_match = self.client.post(
+            self.quick_create_url,
+            {
+                "title": "High Task",
+                "priority": "high",
+                "status": "todo",
+                "filter_priority": "high",
+            },
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response_match.status_code, 200)
+        self.assertIn("High Task", response_match.content.decode("utf-8"))
+
+    def test_kanban_card_can_user_drag_filter(self):
+        from core.templatetags.core_tags import can_user_drag_task
+
+        self.assertTrue(can_user_drag_task(self.task_todo, self.owner))
+        self.assertFalse(can_user_drag_task(self.task_todo, self.member))
+
+        from django.contrib.auth.models import AnonymousUser
+
+        self.assertFalse(can_user_drag_task(self.task_todo, AnonymousUser()))
+
+        self.task_todo.assignee = self.member
+        self.task_todo.save(update_fields=["assignee"])
+        self.assertTrue(can_user_drag_task(self.task_todo, self.member))
+
+        archive_task(task=self.task_todo, actor=self.owner)
+        self.task_todo.refresh_from_db()
+        self.assertFalse(can_user_drag_task(self.task_todo, self.owner))
+
+
 
 
 

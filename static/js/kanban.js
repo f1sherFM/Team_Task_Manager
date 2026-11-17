@@ -5,7 +5,6 @@
     var sortableInstances = [];
 
     function getCsrfToken() {
-        // Try reading from hx-headers on body
         var bodyHeaders = document.body.getAttribute('hx-headers');
         if (bodyHeaders) {
             try {
@@ -17,12 +16,10 @@
                 // ignore JSON parse error
             }
         }
-        // Fallback to CSRF cookie
         var cookieMatch = document.cookie.match(/csrftoken=([^;]+)/);
         if (cookieMatch) {
             return cookieMatch[1];
         }
-        // Fallback to form input
         var csrfInput = document.querySelector('input[name="csrfmiddlewaretoken"]');
         return csrfInput ? csrfInput.value : '';
     }
@@ -63,6 +60,9 @@
             if (boardBtn) boardBtn.classList.remove('active');
             if (listBtn) listBtn.classList.add('active');
             if (save) localStorage.setItem('ttm_task_view_' + userId, 'list');
+
+            // Refresh list view to ensure 100% synchronization after board actions
+            refreshListView();
         } else {
             if (boardView) boardView.classList.remove('d-none');
             if (listView) listView.classList.add('d-none');
@@ -72,7 +72,24 @@
         }
     }
 
-    // 2. Helpers for optimistic UI updates
+    function refreshListView() {
+        if (!window.htmx) return;
+        var filterForm = document.getElementById('task-filter-form');
+        var listContainer = document.getElementById('task-list-container');
+        if (filterForm && listContainer) {
+            var actionUrl = filterForm.getAttribute('action') || window.location.pathname;
+            var formData = new FormData(filterForm);
+            var query = new URLSearchParams(formData).toString();
+            var fullUrl = actionUrl + (query ? ('?' + query) : '');
+            window.htmx.ajax('GET', fullUrl, {
+                target: '#task-list-container',
+                swap: 'outerHTML',
+                headers: { 'HX-Target': 'task-list-container' }
+            });
+        }
+    }
+
+    // 2. Helpers for optimistic UI updates & synchronization
     function updateColumnCount(status, delta) {
         var badge = document.getElementById('column-count-' + status);
         if (badge) {
@@ -94,6 +111,25 @@
                     emptyEl.classList.add('d-none');
                 }
             }
+        });
+    }
+
+    function checkAndDeduplicateCards() {
+        ['todo', 'in_progress', 'done'].forEach(function (st) {
+            var list = document.getElementById('kanban-cards-' + st);
+            if (!list) return;
+            var seen = {};
+            var cards = list.querySelectorAll('.kanban-card');
+            cards.forEach(function (card) {
+                var id = card.getAttribute('data-task-id');
+                if (id) {
+                    if (seen[id]) {
+                        card.remove();
+                    } else {
+                        seen[id] = true;
+                    }
+                }
+            });
         });
     }
 
@@ -135,13 +171,29 @@
         });
     }
 
+    function syncListViewCard(taskId, newStatus) {
+        if (!taskId) return;
+        var listCard = document.getElementById('task-card-' + taskId);
+        if (!listCard) return;
+
+        var filterForm = document.getElementById('task-filter-form');
+        var statusSelect = filterForm ? filterForm.querySelector('select[name="status"]') : null;
+        var activeStatusFilter = statusSelect ? statusSelect.value : '';
+
+        if (activeStatusFilter && activeStatusFilter !== newStatus) {
+            listCard.remove();
+            return;
+        }
+
+        updateCardStatusDropdown(listCard, newStatus);
+    }
+
     // 3. Initialize SortableJS
     function initSortable() {
         if (typeof Sortable === 'undefined') {
             return;
         }
 
-        // Clean up previous instances if DOM was replaced
         sortableInstances.forEach(function (inst) {
             try {
                 inst.destroy();
@@ -159,9 +211,14 @@
                 ghostClass: 'kanban-ghost',
                 chosenClass: 'kanban-chosen',
                 dragClass: 'kanban-dragging',
+                handle: '.kanban-drag-handle', // Drag only by dedicated handle
                 filter: '.kanban-card-disabled, .kanban-empty-placeholder',
                 preventOnFilter: true,
                 onMove: function (evt) {
+                    // Disallow intra-column position reordering (positions are not stored)
+                    if (evt.from === evt.to) {
+                        return false;
+                    }
                     if (evt.dragged.classList.contains('kanban-card-disabled')) {
                         return false;
                     }
@@ -177,8 +234,11 @@
                     var oldStatus = fromList.getAttribute('data-status');
                     var newStatus = toList.getAttribute('data-status');
 
-                    // If dropped within same column or no status change
+                    // If dropped within same column or no status change, revert any local reorder
                     if (fromList === toList || oldStatus === newStatus) {
+                        if (evt.oldIndex !== evt.newIndex) {
+                            revertCardPosition(itemEl, fromList, evt.oldIndex);
+                        }
                         return;
                     }
 
@@ -206,31 +266,45 @@
                     updateColumnCount(newStatus, 1);
                     checkEmptyPlaceholders();
 
-                    // Send POST request
+                    // Send POST request with JSON expectation
                     fetch(statusUrl, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/x-www-form-urlencoded',
                             'X-CSRFToken': csrfToken,
                             'X-TTM-Kanban-Drag': 'true',
-                            'Accept': 'application/json, text/html'
+                            'Accept': 'application/json'
                         },
                         body: 'status=' + encodeURIComponent(newStatus)
                     }).then(function (response) {
+                        if (response.status === 401) {
+                            throw new Error('SESSION_EXPIRED');
+                        }
                         if (!response.ok) {
                             return response.text().then(function (text) {
                                 throw new Error(text || ('Error ' + response.status));
                             });
                         }
-                        return response.text();
-                    }).then(function () {
-                        // Success!
+                        var contentType = response.headers.get('content-type') || '';
+                        if (contentType.indexOf('application/json') === -1) {
+                            // Non-JSON response (e.g. login HTML redirect) is rejected
+                            throw new Error('INVALID_RESPONSE');
+                        }
+                        return response.json();
+                    }).then(function (data) {
+                        if (!data || data.success !== true || data.status !== newStatus) {
+                            throw new Error((data && data.error) || 'Status update mismatch.');
+                        }
+                        // Confirmed success!
                         itemEl.removeAttribute('data-busy');
                         itemEl.classList.remove('opacity-75');
                         itemEl.setAttribute('data-status', newStatus);
                         updateCardStatusDropdown(itemEl, newStatus);
+
+                        // Synchronize List view
+                        syncListViewCard(itemEl.getAttribute('data-task-id'), newStatus);
                     }).catch(function (err) {
-                        // Rollback on 400/403/404/500 or network failure
+                        // Rollback on 401/403/404/500, network error, or invalid response
                         itemEl.removeAttribute('data-busy');
                         itemEl.classList.remove('opacity-75');
                         revertCardPosition(itemEl, fromList, evt.oldIndex);
@@ -238,9 +312,13 @@
                         updateColumnCount(newStatus, -1);
                         checkEmptyPlaceholders();
 
-                        var errorMsg = err.message || 'Failed to update task status.';
-                        if (errorMsg.startsWith('<')) {
-                            errorMsg = 'Permission denied or invalid status change.';
+                        var errorMsg = 'Failed to update task status.';
+                        if (err.message === 'SESSION_EXPIRED') {
+                            errorMsg = 'Your session has expired. Please log in again to perform changes.';
+                        } else if (err.message === 'INVALID_RESPONSE') {
+                            errorMsg = 'Unexpected server response. Please refresh the page.';
+                        } else if (err.message && !err.message.startsWith('<')) {
+                            errorMsg = err.message;
                         }
                         showToast(errorMsg, 'danger');
                     });
@@ -255,6 +333,7 @@
         applyViewPreference();
         initSortable();
         checkEmptyPlaceholders();
+        checkAndDeduplicateCards();
     }
 
     // Global event listeners

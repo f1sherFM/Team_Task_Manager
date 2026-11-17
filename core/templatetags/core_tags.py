@@ -1,6 +1,8 @@
 from django import template
 from django.utils import timezone
 
+from core.permissions import can_change_task_status
+
 register = template.Library()
 
 
@@ -35,4 +37,17 @@ def is_task_overdue(task):
     if not getattr(task, "due_date", None):
         return False
     return task.due_date < timezone.localdate() and task.status != "done"
+
+
+@register.filter
+def can_user_drag_task(task, user):
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if getattr(task, "is_archived", False):
+        return False
+    project = getattr(task, "project", None)
+    if project and getattr(project, "is_archived", False):
+        return False
+    return can_change_task_status(task=task, user=user)
+
 
