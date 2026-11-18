@@ -1898,6 +1898,53 @@ class KanbanBoardTests(TestCase):
         self.assertEqual(response_match.status_code, 200)
         self.assertIn("High Task", response_match.content.decode("utf-8"))
 
+    def test_kanban_quick_create_title_too_long_returns_400(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {
+                "title": "A" * 256,
+                "status": "todo",
+            },
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("cannot exceed 255 characters", response.content.decode("utf-8"))
+
+    def test_kanban_quick_create_assignee_none_filter_matches(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {
+                "title": "Unassigned Task",
+                "status": "todo",
+                "filter_assignee": "none",
+            },
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Unassigned Task", response.content.decode("utf-8"))
+
+    def test_kanban_quick_create_filtered_column_count(self):
+        self.client.force_login(self.owner)
+        response = self.client.post(
+            self.quick_create_url,
+            {
+                "title": "High Priority Task",
+                "status": "todo",
+                "priority": "high",
+                "filter_priority": "high",
+            },
+            headers={"HX-Request": "true"},
+        )
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        # There was 1 Todo task originally with MEDIUM priority.
+        # Now 1 High Priority Task is created.
+        # With filter_priority="high", the filtered todo count is 1 (not 2).
+        self.assertIn('id="column-count-todo"', content)
+        self.assertIn('>1<', content)
+
     def test_kanban_card_can_user_drag_filter(self):
         from core.templatetags.core_tags import can_user_drag_task
 
@@ -1915,6 +1962,31 @@ class KanbanBoardTests(TestCase):
         archive_task(task=self.task_todo, actor=self.owner)
         self.task_todo.refresh_from_db()
         self.assertFalse(can_user_drag_task(self.task_todo, self.owner))
+
+    def test_task_slug_quick_create_does_not_collide(self):
+        task = create_task(
+            project=self.project,
+            title="quick-create",
+            description="",
+            priority=TaskPriority.MEDIUM,
+            due_date=None,
+            assignee=None,
+            created_by=self.owner,
+        )
+        self.assertEqual(task.slug, "quick-create")
+        self.client.force_login(self.member)
+        detail_url = reverse(
+            "task-detail",
+            kwargs={
+                "workspace_slug": self.workspace.slug,
+                "project_slug": self.project.slug,
+                "task_slug": task.slug,
+            },
+        )
+        response = self.client.get(detail_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("quick-create", response.content.decode("utf-8"))
+
 
 
 

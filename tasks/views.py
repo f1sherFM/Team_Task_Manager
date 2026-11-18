@@ -289,7 +289,17 @@ class TaskStatusUpdateView(TaskAccessMixin, View):
             self.task = change_task_status(task=self.task, status=new_status, actor=request.user)
         except DomainError as exc:
             if is_htmx or is_kanban_drag:
-                return HttpResponse(str(exc), status=400)
+                error_msg = str(exc)
+                status_code = (
+                    403
+                    if (
+                        "archived" in error_msg.lower()
+                        or "requires" in error_msg.lower()
+                        or "denied" in error_msg.lower()
+                    )
+                    else 400
+                )
+                return HttpResponse(error_msg, status=status_code)
             messages.error(request, str(exc))
             return redirect(
                 "task-detail",
@@ -347,6 +357,16 @@ class KanbanTaskQuickCreateView(ProjectTaskAccessMixin, View):
             if is_htmx:
                 return HttpResponse("Task title is required.", status=400)
             messages.error(request, "Task title is required.")
+            return redirect(
+                "project-task-list",
+                workspace_slug=self.project.workspace.slug,
+                project_slug=self.project.slug,
+            )
+
+        if len(title) > 255:
+            if is_htmx:
+                return HttpResponse("Task title cannot exceed 255 characters.", status=400)
+            messages.error(request, "Task title cannot exceed 255 characters.")
             return redirect(
                 "project-task-list",
                 workspace_slug=self.project.workspace.slug,
@@ -420,22 +440,28 @@ class KanbanTaskQuickCreateView(ProjectTaskAccessMixin, View):
             filter_is_overdue = request.POST.get("filter_is_overdue", "").strip() or None
             filter_is_archived = request.POST.get("filter_is_archived", "").strip()
 
-            matches_filters = True
-            if filter_search and filter_search.lower() not in task.title.lower():
-                matches_filters = False
-            if filter_priority and task.priority != filter_priority:
-                matches_filters = False
-            if filter_assignee:
-                if filter_assignee == "unassigned" and task.assignee_id is not None:
-                    matches_filters = False
-                elif filter_assignee != "unassigned" and str(task.assignee_id) != filter_assignee:
-                    matches_filters = False
-            if filter_tag:
-                matches_filters = False
-            if filter_is_overdue == "true":
-                matches_filters = False
-            if filter_is_archived == "1":
-                matches_filters = False
+            if filter_is_archived in ("1", "true"):
+                is_archived = True
+            elif filter_is_archived == "all":
+                is_archived = None
+            else:
+                is_archived = False
+
+            filtered_qs = get_project_tasks(project=self.project)
+            try:
+                filtered_qs = filter_tasks(
+                    filtered_qs,
+                    priority=filter_priority,
+                    assignee_id=filter_assignee,
+                    tag_slug=filter_tag,
+                    is_overdue=filter_is_overdue,
+                    is_archived=is_archived,
+                    search=filter_search,
+                )
+            except ValueError:
+                filtered_qs = filter_tasks(filtered_qs, is_archived=is_archived)
+
+            matches_filters = filtered_qs.filter(id=task.id).exists()
 
             if not matches_filters:
                 response = HttpResponse("", status=200)
@@ -444,7 +470,7 @@ class KanbanTaskQuickCreateView(ProjectTaskAccessMixin, View):
                 )
                 return response
 
-            column_count = get_project_tasks(project=self.project).filter(status=status).count()
+            column_count = filtered_qs.filter(status=status).count()
             response = render(
                 request,
                 "tasks/partials/kanban_card.html",

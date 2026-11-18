@@ -16,7 +16,7 @@ urlpatterns = [
         name="project-task-list",
     ),
     path(
-        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/quick-create/",
+        "workspaces/<slug:workspace_slug>/projects/<slug:project_slug>/tasks/kanban/quick-create/",
         KanbanTaskQuickCreateView.as_view(),
         name="kanban-task-quick-create",
     ),

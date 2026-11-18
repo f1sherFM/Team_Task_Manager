@@ -37,6 +37,12 @@ def create_task(
     if project.is_archived:
         raise DomainError("Tasks cannot be changed in archived projects.")
 
+    if not title or not title.strip():
+        raise DomainError("Task title is required.")
+
+    if len(title) > 255:
+        raise DomainError("Task title cannot exceed 255 characters.")
+
     if not can_create_task(project=project, user=created_by):
         raise DomainError("Task creation requires workspace membership.")
 
